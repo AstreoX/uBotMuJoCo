@@ -14,7 +14,7 @@ inline const FName BackendName(TEXT("MuJoCo"));
 /** Registers the MuJoCo factory; solvers and their data remain world-local. */
 class UBOTMUJOCO_API FUBotMuJoCoModule : public IModuleInterface
 {
-  public:
+public:
     virtual void StartupModule() override;
     virtual void ShutdownModule() override;
 };

@@ -18,16 +18,17 @@ struct FResourceCollector
 {
     FString RootDirectory;
     TArray<FUBotMuJoCoResource> Resources;
-    TSet<FString> Visited;
+    TArray<FString> Visited;
     FString MeshDirectory, TextureDirectory, AssetDirectory;
     FText Error;
 
-    bool AddFile(const FString &AbsolutePath, const FString &VirtualPath, bool bXML)
+    bool AddFile(const FString& AbsolutePath, const FString& VirtualPath, bool bXML)
     {
         FString Key = VirtualPath;
         FPaths::NormalizeFilename(Key);
         FPaths::CollapseRelativeDirectories(Key);
-        if (Visited.Contains(Key))
+        if (Visited.ContainsByPredicate(
+                [&Key](const FString& Name) { return Name.Equals(Key, ESearchCase::CaseSensitive); }))
             return true;
         FUBotMuJoCoResource R;
         R.Name = Key;
@@ -52,7 +53,7 @@ struct FResourceCollector
         return Visit(Document.GetRootNode(), AbsolutePath, Key);
     }
 
-    bool Visit(const FXmlNode *Node, const FString &CurrentAbsolute, const FString &CurrentVirtual)
+    bool Visit(const FXmlNode* Node, const FString& CurrentAbsolute, const FString& CurrentVirtual)
     {
         if (!Node)
             return true;
@@ -96,14 +97,14 @@ struct FResourceCollector
             if (!AddFile(Absolute, Relative, bInclude))
                 return false;
         }
-        for (const FXmlNode *Child : Node->GetChildrenNodes())
+        for (const FXmlNode* Child : Node->GetChildrenNodes())
             if (!Visit(Child, CurrentAbsolute, CurrentVirtual))
                 return false;
         return true;
     }
 };
 
-bool ImportAsset(const FString &Filename, UUBotPhysicsModelAsset &Asset, UUBotMuJoCoSolverPreset &Preset, FText &Error)
+bool ImportAsset(const FString& Filename, UUBotPhysicsModelAsset& Asset, UUBotMuJoCoSolverPreset& Preset, FText& Error)
 {
     FResourceCollector Collector;
     Collector.RootDirectory = FPaths::GetPath(FPaths::ConvertRelativePathToFull(Filename));
@@ -138,7 +139,7 @@ UUBotMuJoCoImportFactory::UUBotMuJoCoImportFactory()
     ImportPriority = DefaultImportPriority + 10;
 }
 
-bool UUBotMuJoCoImportFactory::FactoryCanImport(const FString &Filename)
+bool UUBotMuJoCoImportFactory::FactoryCanImport(const FString& Filename)
 {
     if (FPaths::GetExtension(Filename).Equals(TEXT("urdf"), ESearchCase::IgnoreCase))
         return true;
@@ -148,15 +149,15 @@ bool UUBotMuJoCoImportFactory::FactoryCanImport(const FString &Filename)
     return Document.IsValid() && Document.GetRootNode() && Document.GetRootNode()->GetTag() == TEXT("mujoco");
 }
 
-UObject *UUBotMuJoCoImportFactory::FactoryCreateFile(UClass *InClass, UObject *Parent, FName Name, EObjectFlags Flags,
-                                                     const FString &Filename, const TCHAR *Parms,
-                                                     FFeedbackContext *Warn, bool &bCanceled)
+UObject* UUBotMuJoCoImportFactory::FactoryCreateFile(UClass* InClass, UObject* Parent, FName Name, EObjectFlags Flags,
+                                                     const FString& Filename, const TCHAR* Parms,
+                                                     FFeedbackContext* Warn, bool& bCanceled)
 {
     bCanceled = false;
-    auto *Asset = NewObject<UUBotPhysicsModelAsset>(Parent, Name, Flags);
+    auto* Asset = NewObject<UUBotPhysicsModelAsset>(Parent, Name, Flags);
     const FString PresetPackageName = Parent->GetOutermost()->GetName() + TEXT("_SolverPreset");
-    UPackage *PresetPackage = CreatePackage(*PresetPackageName);
-    auto *Preset =
+    UPackage* PresetPackage = CreatePackage(*PresetPackageName);
+    auto* Preset =
         NewObject<UUBotMuJoCoSolverPreset>(PresetPackage, *FPackageName::GetLongPackageAssetName(PresetPackageName),
                                            RF_Public | RF_Standalone | RF_Transactional);
     FText Error;
@@ -172,13 +173,13 @@ UObject *UUBotMuJoCoImportFactory::FactoryCreateFile(UClass *InClass, UObject *P
     return Asset;
 }
 
-bool UUBotMuJoCoImportFactory::CanReimport(UObject *Object, TArray<FString> &Filenames)
+bool UUBotMuJoCoImportFactory::CanReimport(UObject* Object, TArray<FString>& Filenames)
 {
-    const auto *Asset = Cast<UUBotPhysicsModelAsset>(Object);
-    const auto *Data = Asset ? Cast<UUBotMuJoCoModelData>(Asset->Model.Extension) : nullptr;
+    const auto* Asset = Cast<UUBotPhysicsModelAsset>(Object);
+    const auto* Data = Asset ? Cast<UUBotMuJoCoModelData>(Asset->Model.Extension) : nullptr;
     if (!Data)
         return false;
-    if (const FString *Path = SessionSourcePaths.Find(Object))
+    if (const FString* Path = SessionSourcePaths.Find(Object))
         Filenames.Add(*Path);
 #if WITH_EDITORONLY_DATA
     else
@@ -187,17 +188,17 @@ bool UUBotMuJoCoImportFactory::CanReimport(UObject *Object, TArray<FString> &Fil
     return true;
 }
 
-void UUBotMuJoCoImportFactory::SetReimportPaths(UObject *Object, const TArray<FString> &Paths)
+void UUBotMuJoCoImportFactory::SetReimportPaths(UObject* Object, const TArray<FString>& Paths)
 {
     if (Paths.Num() == 1)
         SessionSourcePaths.Add(Object, Paths[0]);
 }
 
-EReimportResult::Type UUBotMuJoCoImportFactory::Reimport(UObject *Object)
+EReimportResult::Type UUBotMuJoCoImportFactory::Reimport(UObject* Object)
 {
-    auto *Asset = Cast<UUBotPhysicsModelAsset>(Object);
-    auto *Data = Asset ? Cast<UUBotMuJoCoModelData>(Asset->Model.Extension) : nullptr;
-    const FString *Path = SessionSourcePaths.Find(Object);
+    auto* Asset = Cast<UUBotPhysicsModelAsset>(Object);
+    auto* Data = Asset ? Cast<UUBotMuJoCoModelData>(Asset->Model.Extension) : nullptr;
+    const FString* Path = SessionSourcePaths.Find(Object);
     if (!Data || !Path || !Data->SuggestedPreset)
         return EReimportResult::Failed;
     FText Error;

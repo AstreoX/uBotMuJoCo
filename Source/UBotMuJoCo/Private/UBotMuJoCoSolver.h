@@ -2,29 +2,33 @@
 
 #include "UBotMuJoCoNative.h"
 #include "UBotPhysicsBackend.h"
+#include "UBotMuJoCoLibrary.h"
 
 /** UE adaptation only. Native integration state and resources belong to Scene. */
 class FUBotMuJoCoSolver final : public IUBotPhysicsSolver
 {
-  public:
-    FUBotMuJoCoSolver(const UBot::MuJoCo::Native::Configuration &Configuration, bool bAllowSceneMeshApproximation);
-    virtual bool AddModel(const FUBotPhysicsModelInstanceDesc &Desc, FUBotPhysicsModelInstanceResult &OutResult,
-                          FText &OutError) override;
-    virtual bool RemoveModel(int64 InstanceId, FText &OutError) override;
+public:
+    FUBotMuJoCoSolver(const UBot::MuJoCo::Native::Configuration& Configuration, bool bAllowSceneMeshApproximation);
+    virtual bool AddModel(const FUBotPhysicsModelInstanceDesc& Desc, FUBotPhysicsModelInstanceResult& OutResult,
+                          FText& OutError) override;
+    virtual bool RemoveModel(int64 InstanceId, FText& OutError) override;
     virtual double GetStepSeconds() const override;
-    virtual bool Step(double StepEndTimeSeconds, FText &OutError) override;
+    virtual bool Step(double StepEndTimeSeconds, FText& OutError) override;
     virtual EUBotPhysicsOverrunPolicy GetOverrunPolicy() const override
     {
         return EUBotPhysicsOverrunPolicy::Suspend;
     }
-    virtual bool Reset(double SimTimeSeconds, FText &OutError) override;
-    virtual bool ApplyInputs(int64 InstanceId, const FUBotPhysicsInputs &Inputs, FText &OutError) override;
-    virtual bool GetJointState(int64 InstanceId, const FString &JointId,
-                               FUBotPhysicsJointState &OutState) const override;
-    virtual bool GetBodyState(int32 BodyHandle, FUBotBodyState &OutState) const override;
-    virtual bool UpdateScene(const FUBotPhysicsSceneUpdate &Update, FText &OutError) override;
+    virtual bool Reset(double SimTimeSeconds, FText& OutError) override;
+    virtual bool ApplyInputs(int64 InstanceId, const FUBotPhysicsInputs& Inputs, FText& OutError) override;
+    virtual bool GetJointState(int64 InstanceId, const FString& JointId,
+                               FUBotPhysicsJointState& OutState) const override;
+    virtual bool GetBodyState(int32 BodyHandle, FUBotBodyState& OutState) const override;
+    virtual bool UpdateScene(const FUBotPhysicsSceneUpdate& Update, FText& OutError) override;
+    bool GetActuators(int64 InstanceId, TArray<FUBotMuJoCoActuatorDescription>& OutActuators) const;
+    bool GetActivation(int64 InstanceId, const FString& Name, FUBotMuJoCoNativeValues& OutState) const;
+    bool GetSensor(int64 InstanceId, const FString& Name, FUBotMuJoCoNativeValues& OutState) const;
 
-  private:
+private:
     struct FInstance
     {
         UBot::MuJoCo::Native::Instance Native;
@@ -37,9 +41,9 @@ class FUBotMuJoCoSolver final : public IUBotPhysicsSolver
         FString BodyId;
         bool bPublished = false;
     };
-    bool Compile(const TArray<FInstance> &Models, const TMap<int64, FUBotPhysicsSceneBody> &Foreign, bool bPreserve,
-                 FText &OutError);
-    const FInstance *FindInstance(int64 InstanceId) const;
+    bool Compile(const TArray<FInstance>& Models, const TMap<int64, FUBotPhysicsSceneBody>& Foreign, bool bPreserve,
+                 FText& OutError);
+    const FInstance* FindInstance(int64 InstanceId) const;
     UBot::MuJoCo::Native::Inputs MakeInputs() const;
     TArray<FInstance> Instances;
     TMap<int32, FHandle> Handles;
