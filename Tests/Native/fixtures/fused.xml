@@ -1,0 +1,1 @@
+<mujoco><compiler angle="radian" fusestatic="true"/><worldbody><body name="fixed" pos="0.2 0.3 0.4"><geom name="static_box" type="box" size="0.1 0.2 0.3"/></body><body name="moving" pos="1 0 2"><freejoint name="moving_free"/><geom name="dynamic_ball" type="sphere" size="0.1" mass="1"/></body></worldbody></mujoco>

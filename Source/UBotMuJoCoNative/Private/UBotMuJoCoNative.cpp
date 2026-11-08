@@ -429,9 +429,9 @@ bool Import(const std::string &Filename, const std::vector<Resource> &Resources,
             char Message[2048]{};
             SpecPtr S(mj_parseXML(Filename.c_str(), &Files.Value, Message, sizeof(Message)), mj_deleteSpec);
             Require(S != nullptr, Message);
-            // Preserve identities of fixed links and body frames rather than allowing compiler fusion/alignment.
-            S->compiler.fusestatic = false;
-            S->compiler.alignfree = false;
+            // First compile honors source compiler semantics. Common values are extracted from
+            // the resulting normalized frames; reconstruction disables a second normalization.
+
             S->compiler.usethread = false;
             if (Source.RootElement() && std::strcmp(Source.RootElement()->Name(), "robot") == 0)
             {
@@ -486,7 +486,8 @@ bool Import(const std::string &Filename, const std::vector<Resource> &Resources,
                     }
                 }
             }
-            for (mjtObj T : {mjOBJ_BODY, mjOBJ_JOINT, mjOBJ_GEOM, mjOBJ_ACTUATOR, mjOBJ_SITE, mjOBJ_KEY, mjOBJ_SENSOR})
+            for (mjtObj T : {mjOBJ_BODY, mjOBJ_JOINT, mjOBJ_GEOM, mjOBJ_ACTUATOR, mjOBJ_SITE, mjOBJ_KEY, mjOBJ_SENSOR,
+                             mjOBJ_CAMERA, mjOBJ_LIGHT})
             {
                 int Index = 0;
                 for (mjsElement *E = mjs_firstElement(S.get(), T); E; E = mjs_nextElement(S.get(), E), ++Index)
@@ -674,6 +675,36 @@ bool Import(const std::string &Filename, const std::vector<Resource> &Resources,
                 V.Geometries.push_back(C);
             }
             // Split native-only attributes and non-physical body children from the canonical hierarchy.
+            auto CopyNativeChildren = [&](auto &&Self, const XMLElement *From, XMLElement *To) -> void
+            {
+                for (const XMLElement *C = From->FirstChildElement(); C; C = C->NextSiblingElement())
+                {
+                    const std::string T = C->Name();
+                    if (T == "body" || T == "joint" || T == "freejoint" || T == "geom" || T == "inertial" ||
+                        T == "site" || T == "camera" || T == "light")
+                    {
+                        continue;
+                    }
+                    if (T == "frame")
+                    {
+                        XMLElement *Frame = Extras.NewElement("frame");
+                        CopyAttributes(C, Frame);
+                        Self(Self, C, Frame);
+                        if (Frame->FirstChildElement())
+                        {
+                            To->InsertEndChild(Frame);
+                        }
+                        else
+                        {
+                            Extras.DeleteNode(Frame);
+                        }
+                    }
+                    else
+                    {
+                        To->InsertEndChild(C->DeepClone(&Extras));
+                    }
+                }
+            };
             auto Visit = [&](auto &&Self, XMLElement *Parent) -> void
             {
                 for (XMLElement *E = Parent->FirstChildElement(); E; E = E->NextSiblingElement())
@@ -704,14 +735,11 @@ bool Import(const std::string &Filename, const std::vector<Resource> &Resources,
                             StripPose(X);
                             Remove(X, {"type", "size", "mesh", "hfield", "rgba", "mass", "density", "friction"});
                         }
-                        for (XMLElement *C = E->FirstChildElement(); C; C = C->NextSiblingElement())
-                        {
-                            const std::string CT = C->Name();
-                            if (CT != "body" && CT != "joint" && CT != "freejoint" && CT != "geom" && CT != "inertial")
-                            {
-                                X->InsertEndChild(C->DeepClone(&Extras));
-                            }
-                        }
+                        CopyNativeChildren(CopyNativeChildren, E, X);
+                        Self(Self, E);
+                    }
+                    else if (T == "frame")
+                    {
                         Self(Self, E);
                     }
                 }
@@ -722,6 +750,123 @@ bool Import(const std::string &Filename, const std::vector<Resource> &Resources,
                 D.InsertEndChild(Wrapper);
                 Wrapper->InsertEndChild(WB);
                 Visit(Visit, Wrapper);
+            }
+
+            // Compiler normalization can align free-body inertial frames or fuse fixed bodies.
+            // Native-only tree elements must use their compiled local frames, too; copying
+            // their original XML poses would mix source and normalized body coordinates.
+            auto FindTree = [&](auto &&Self, XMLNode *Parent, const char *Tag,
+                                const std::string &ElementName) -> XMLElement *
+            {
+                for (XMLElement *E = Parent->FirstChildElement(); E; E = E->NextSiblingElement())
+                {
+                    if (std::strcmp(E->Name(), Tag) == 0 && E->Attribute("name") && ElementName == E->Attribute("name"))
+                    {
+                        return E;
+                    }
+                    if (XMLElement *Found = Self(Self, E, Tag, ElementName))
+                    {
+                        return Found;
+                    }
+                }
+                return nullptr;
+            };
+            auto NativeBody = [&](int B) -> XMLElement *
+            {
+                const std::string Id = B ? Name(M.get(), mjOBJ_BODY, B) : "world";
+                for (XMLElement *E = Native->FirstChildElement("body"); E; E = E->NextSiblingElement("body"))
+                {
+                    if (E->Attribute("id") && Id == E->Attribute("id"))
+                    {
+                        return E;
+                    }
+                }
+                XMLElement *E = Extras.NewElement("body");
+                E->SetAttribute("id", Id.c_str());
+                Native->InsertEndChild(E);
+                return E;
+            };
+            auto CopyTreeElement = [&](mjtObj Type, int Id, const char *Tag, int BodyId) -> XMLElement *
+            {
+                const std::string ElementName = Name(M.get(), Type, Id);
+                XMLElement *SourceElement = FindTree(FindTree, &D, Tag, ElementName);
+                Require(SourceElement != nullptr,
+                        "Native normalized tree element is absent from source: " + ElementName);
+                XMLElement *E = SourceElement->DeepClone(&Extras)->ToElement();
+                StripPose(E);
+                NativeBody(BodyId)->InsertEndChild(E);
+                return E;
+            };
+            for (int A = 0; A < M->nsite; ++A)
+            {
+                XMLElement *E = CopyTreeElement(mjOBJ_SITE, A, "site", M->site_bodyid[A]);
+                SetPose(E, {Vec(M->site_pos + 3 * A), Quat(M->site_quat + 4 * A)});
+                E->SetAttribute(
+                    "size", Numbers({M->site_size[3 * A], M->site_size[3 * A + 1], M->site_size[3 * A + 2]}).c_str());
+            }
+            for (int A = 0; A < M->ncam; ++A)
+            {
+                XMLElement *E = CopyTreeElement(mjOBJ_CAMERA, A, "camera", M->cam_bodyid[A]);
+                SetPose(E, {Vec(M->cam_pos + 3 * A), Quat(M->cam_quat + 4 * A)});
+            }
+            for (int A = 0; A < M->nlight; ++A)
+            {
+                XMLElement *E = CopyTreeElement(mjOBJ_LIGHT, A, "light", M->light_bodyid[A]);
+                E->SetAttribute(
+                    "pos", Numbers({M->light_pos[3 * A], M->light_pos[3 * A + 1], M->light_pos[3 * A + 2]}).c_str());
+                E->SetAttribute(
+                    "dir", Numbers({M->light_dir[3 * A], M->light_dir[3 * A + 1], M->light_dir[3 * A + 2]}).c_str());
+            }
+
+            if (M->nkey)
+            {
+                if (XMLElement *Existing = RootExtras->FirstChildElement("keyframe"))
+                {
+                    RootExtras->DeleteChild(Existing);
+                }
+                XMLElement *Keys = Extras.NewElement("keyframe");
+                RootExtras->InsertEndChild(Keys);
+                auto Array = [](const mjtNum *Values, mjtSize Count)
+                {
+                    std::ostringstream Text;
+                    Text << std::setprecision(17);
+                    for (mjtSize K = 0; K < Count; ++K)
+                    {
+                        Require(std::isfinite(Values[K]), "Non-finite native keyframe");
+                        Text << Values[K] << ' ';
+                    }
+                    return Text.str();
+                };
+                for (int K = 0; K < M->nkey; ++K)
+                {
+                    XMLElement *Key = Extras.NewElement("key");
+                    Keys->InsertEndChild(Key);
+                    const char *N = mj_id2name(M.get(), mjOBJ_KEY, K);
+                    const std::string Generated = "ubot_key_" + std::to_string(K);
+                    Key->SetAttribute("name", N ? N : Generated.c_str());
+                    Key->SetAttribute("time", M->key_time[K]);
+                    if (M->nq)
+                    {
+                        Key->SetAttribute("qpos", Array(M->key_qpos + K * M->nq, M->nq).c_str());
+                    }
+                    if (M->nv)
+                    {
+                        Key->SetAttribute("qvel", Array(M->key_qvel + K * M->nv, M->nv).c_str());
+                    }
+                    if (M->na)
+                    {
+                        Key->SetAttribute("act", Array(M->key_act + K * M->na, M->na).c_str());
+                    }
+                    if (M->nu)
+                    {
+                        Key->SetAttribute("ctrl", Array(M->key_ctrl + K * M->nu, M->nu).c_str());
+                    }
+                    if (M->nmocap)
+                    {
+                        Key->SetAttribute("mpos", Array(M->key_mpos + K * 3 * M->nmocap, 3 * M->nmocap).c_str());
+                        Key->SetAttribute("mquat", Array(M->key_mquat + K * 4 * M->nmocap, 4 * M->nmocap).c_str());
+                    }
+                }
             }
             V.NativeData = Text(Native);
             Result.Messages.push_back("Imported rigid-body model; native sections retained in the backend extension");
