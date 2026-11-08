@@ -1,0 +1,1 @@
+<mujoco><compiler angle="radian"/><worldbody><body name="free" pos="0 0 2"><freejoint name="root"/><geom name="ball" type="sphere" size="0.1" mass="1"/><body name="child" pos="0 0 -0.3"><joint name="ball_joint" type="ball"/><geom name="child_box" type="box" size="0.1 0.1 0.1" mass="0.2"/></body></body></worldbody></mujoco>
