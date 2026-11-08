@@ -49,6 +49,7 @@ private:
     TArray<FInstance> Instances;
     TMap<int32, FHandle> Handles;
     TMap<int64, FUBotPhysicsSceneBody> ForeignBodies;
+    TSet<int64> ReportedRestitutionBodies;
     UBot::MuJoCo::Native::Scene Scene;
     UBot::MuJoCo::Native::Configuration Config;
     int32 NextHandle = 0;
