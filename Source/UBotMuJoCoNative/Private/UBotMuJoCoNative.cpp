@@ -556,6 +556,7 @@ bool Import(const std::string &Filename, const std::vector<Resource> &Resources,
                 C.DiagonalInertia = Vec(M->body_inertia + 3 * B);
                 C.InertiaOrientation = Quat(M->body_iquat + 4 * B);
                 C.Kinematic = M->body_mocapid[B] >= 0;
+                C.ModelFrame = B == 0;
                 V.Bodies.push_back(C);
             }
             for (int J = 0; J < M->njnt; ++J)
@@ -868,7 +869,7 @@ bool BuildXML(const Model &V, std::string &Out, std::string &Error)
             {
                 Require(!B.Id.empty() && Bodies.find(B.Id) == Bodies.end(), "Duplicate/empty body identity");
                 Require(std::isfinite(B.Mass) && B.Mass >= 0, "Body mass must be finite and nonnegative");
-                XMLElement *E = B.ParentId.empty() && B.Name == "world" ? WB : D.NewElement("body");
+                XMLElement *E = B.ModelFrame ? WB : D.NewElement("body");
                 if (E != WB)
                 {
                     E->SetAttribute("name", B.Name.c_str());
@@ -927,9 +928,12 @@ bool BuildXML(const Model &V, std::string &Out, std::string &Error)
                 Apply("joint", J.Id, E);
                 E->SetAttribute("name", J.Name.c_str());
                 E->SetAttribute("type", JointName(J.Type));
-                if (J.Type == JointType::Slide || J.Type == JointType::Hinge)
+                if (J.Type != JointType::Free)
                 {
                     E->SetAttribute("pos", Numbers({J.Position.X, J.Position.Y, J.Position.Z}).c_str());
+                }
+                if (J.Type == JointType::Slide || J.Type == JointType::Hinge)
+                {
                     E->SetAttribute("axis", Numbers({J.Axis.X, J.Axis.Y, J.Axis.Z}).c_str());
                 }
                 E->SetAttribute("limited", J.Limited ? "true" : "false");
@@ -1150,7 +1154,7 @@ struct Scene::Implementation
             {
                 BodyState S;
                 S.NativeTimeSeconds = D->time;
-                if (B.Name == "world" && B.ParentId.empty())
+                if (B.ModelFrame)
                 {
                     S.Pose = I.Placement;
                 }
@@ -1476,10 +1480,11 @@ bool Scene::Step(const Inputs &Input, std::string &Error)
                 for (std::size_t K = 0; K < A.Values.size(); ++K)
                 {
                     Require(std::isfinite(A.Values[K]), "Non-finite actuator input");
-                    if (M->actuator_ctrllimited[Id])
+                    const int Address = M->actuator_ctrladr[Id] + static_cast<int>(K);
+                    if (M->actuator_ctrllimited[Address])
                     {
-                        Require(A.Values[K] >= M->actuator_ctrlrange[2 * Id] &&
-                                    A.Values[K] <= M->actuator_ctrlrange[2 * Id + 1],
+                        Require(A.Values[K] >= M->actuator_ctrlrange[2 * Address] &&
+                                    A.Values[K] <= M->actuator_ctrlrange[2 * Address + 1],
                                 "Actuator input outside authored range");
                     }
                     D->ctrl[M->actuator_ctrladr[Id] + K] = A.Values[K];
@@ -1546,32 +1551,89 @@ bool Scene::Step(const Inputs &Input, std::string &Error)
 }
 bool Scene::Reset(const std::string &Keyframe, std::string &Error)
 {
-    return Guard(Error,
-                 [&]
-                 {
-                     Require(Impl->M && Impl->D, "No native model to reset");
-                     if (Keyframe.empty())
-                     {
-                         mj_resetData(Impl->M.get(), Impl->D.get());
-                         ApplyInitial(Impl->M.get(), Impl->D.get(), Impl->Instances);
-                     }
-                     else
-                     {
-                         Require(Impl->Instances.size() == 1, "Named keyframe reset requires exactly one instance");
-                         const int K =
-                             mj_name2id(Impl->M.get(), mjOBJ_KEY, (Prefix(Impl->Instances[0].Id) + Keyframe).c_str());
-                         Require(K >= 0, "Unknown keyframe");
-                         mj_resetDataKeyframe(Impl->M.get(), Impl->D.get(), K);
-                     }
-                     mj_forward(Impl->M.get(), Impl->D.get());
-                     Impl->Faulted = false;
-                     Impl->Published = false;
-                     Impl->PublishedTime = Impl->D->time;
-                     Impl->BodyStates.clear();
-                     Impl->JointStates.clear();
-                     Impl->ActuatorStates.clear();
-                     Impl->SensorStates.clear();
-                 });
+    return Guard(
+        Error,
+        [&]
+        {
+            Require(Impl->M && Impl->D, "No native model to reset");
+            if (Keyframe.empty())
+            {
+                mj_resetData(Impl->M.get(), Impl->D.get());
+                ApplyInitial(Impl->M.get(), Impl->D.get(), Impl->Instances);
+            }
+            else
+            {
+                Require(Impl->Instances.size() == 1, "Named keyframe reset requires exactly one instance");
+                const int K = mj_name2id(Impl->M.get(), mjOBJ_KEY, (Prefix(Impl->Instances[0].Id) + Keyframe).c_str());
+                Require(K >= 0, "Unknown keyframe");
+                mj_resetDataKeyframe(Impl->M.get(), Impl->D.get(), K);
+                const Instance &I = Impl->Instances[0];
+                XMLDocument Extra;
+                Require(Extra.Parse(I.Value.NativeData.c_str()) == XML_SUCCESS, "Invalid native keyframe metadata");
+                XMLElement *Root = Extra.RootElement() ? Extra.RootElement()->FirstChildElement("root") : nullptr;
+                XMLElement *Keys = Root ? Root->FirstChildElement("keyframe") : nullptr;
+                XMLElement *Authored = nullptr;
+                if (Keys)
+                {
+                    for (XMLElement *E = Keys->FirstChildElement("key"); E; E = E->NextSiblingElement("key"))
+                    {
+                        if (E->Attribute("name") && Keyframe == E->Attribute("name"))
+                        {
+                            Authored = E;
+                            break;
+                        }
+                    }
+                }
+                Require(Authored != nullptr, "Keyframe is absent from the model extension");
+                const mjtNum PP[3]{I.Placement.Position.X, I.Placement.Position.Y, I.Placement.Position.Z};
+                const mjtNum PQ[4]{I.Placement.Rotation.W, I.Placement.Rotation.X, I.Placement.Rotation.Y,
+                                   I.Placement.Rotation.Z};
+                for (const Joint &J : I.Value.Joints)
+                {
+                    if (J.Type != JointType::Free)
+                    {
+                        continue;
+                    }
+                    const int ID = mj_name2id(Impl->M.get(), mjOBJ_JOINT, (Prefix(I.Id) + J.Name).c_str());
+                    mjtNum *Q = Impl->D->qpos + Impl->M->jnt_qposadr[ID];
+                    mjtNum *V = Impl->D->qvel + Impl->M->jnt_dofadr[ID];
+                    if (Authored->Attribute("qpos"))
+                    {
+                        const mjtNum RawP[3]{Q[0], Q[1], Q[2]}, RawQ[4]{Q[3], Q[4], Q[5], Q[6]};
+                        mju_mulPose(Q, Q + 3, PP, PQ, RawP, RawQ);
+                    }
+                    const mjtNum RawV[3]{V[0], V[1], V[2]};
+                    mju_rotVecQuat(V, RawV, PQ);
+                }
+                for (int A = 0; A < Impl->M->nmocap; ++A)
+                {
+                    mjtNum *P = Impl->D->mocap_pos + 3 * A;
+                    mjtNum *Q = Impl->D->mocap_quat + 4 * A;
+                    if (Authored->Attribute("mpos"))
+                    {
+                        const mjtNum Raw[3]{P[0], P[1], P[2]};
+                        mju_rotVecQuat(P, Raw, PQ);
+                        for (int Axis = 0; Axis < 3; ++Axis)
+                        {
+                            P[Axis] += PP[Axis];
+                        }
+                    }
+                    if (Authored->Attribute("mquat"))
+                    {
+                        const mjtNum Raw[4]{Q[0], Q[1], Q[2], Q[3]};
+                        mju_mulQuat(Q, PQ, Raw);
+                    }
+                }
+            }
+            mj_forward(Impl->M.get(), Impl->D.get());
+            Impl->Faulted = false;
+            Impl->Published = false;
+            Impl->PublishedTime = Impl->D->time;
+            Impl->BodyStates.clear();
+            Impl->JointStates.clear();
+            Impl->ActuatorStates.clear();
+            Impl->SensorStates.clear();
+        });
 }
 bool Scene::GetBodyState(std::uint64_t I, const std::string &B, BodyState &S) const
 {
@@ -1643,9 +1705,13 @@ std::vector<ActuatorInfo> Scene::GetActuators(std::uint64_t InstanceId) const
             ActuatorInfo I;
             I.Name = std::string(N).substr(P.size());
             I.InputCount = Impl->M->actuator_ctrlnum[A];
-            I.Limited = Impl->M->actuator_ctrllimited[A];
-            I.Minimum = Impl->M->actuator_ctrlrange[2 * A];
-            I.Maximum = Impl->M->actuator_ctrlrange[2 * A + 1];
+            for (int K = 0; K < I.InputCount; ++K)
+            {
+                const int Address = Impl->M->actuator_ctrladr[A] + K;
+                I.InputLimited.push_back(Impl->M->actuator_ctrllimited[Address]);
+                I.InputMinimum.push_back(Impl->M->actuator_ctrlrange[2 * Address]);
+                I.InputMaximum.push_back(Impl->M->actuator_ctrlrange[2 * Address + 1]);
+            }
             Result.push_back(I);
         }
     }

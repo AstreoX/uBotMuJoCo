@@ -63,6 +63,8 @@ struct Body
     Vector3 CenterOfMass, DiagonalInertia;
     Quaternion InertiaOrientation;
     bool Kinematic = false;
+    /** Explicit synthetic model frame, never inferred from a user name or identity. */
+    bool ModelFrame = false;
 };
 struct Joint
 {
@@ -197,8 +199,8 @@ struct ActuatorInfo
 {
     std::string Name;
     int InputCount = 0;
-    bool Limited = false;
-    double Minimum = 0, Maximum = 0;
+    std::vector<bool> InputLimited;
+    std::vector<double> InputMinimum, InputMaximum;
 };
 
 class UBOTMUJOCONATIVE_API Scene
