@@ -17,12 +17,12 @@ struct UBOTMUJOCO_API FUBotMuJoCoActuatorDescription
     /** Number of simultaneous inputs accepted by this actuator. */
     UPROPERTY(BlueprintReadOnly, Category = "MuJoCo")
     int32 InputCount = 0;
-    /** Whether the authored input range is enforced. */
+    /** Whether each authored control channel has an enforced range. */
     UPROPERTY(BlueprintReadOnly, Category = "MuJoCo")
-    bool bLimited = false;
-    /** Native input range, in the actuator model's units. */
+    TArray<bool> InputLimited;
+    /** One native range per input channel, in that channel's authored units. */
     UPROPERTY(BlueprintReadOnly, Category = "MuJoCo")
-    FVector2D Range = FVector2D::ZeroVector;
+    TArray<FVector2D> InputRanges;
 };
 
 /** Read-only native endpoint values. These retain native sensor/activation units and conventions. */

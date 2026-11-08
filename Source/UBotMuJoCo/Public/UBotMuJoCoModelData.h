@@ -27,6 +27,8 @@ struct UBOTMUJOCO_API FUBotMuJoCoElementName
     FString Id;
     UPROPERTY()
     FString Name;
+    UPROPERTY()
+    bool bModelFrame = false;
 };
 
 /** MuJoCo's three friction coefficients have exclusive native semantics. */

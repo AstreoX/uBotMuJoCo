@@ -383,9 +383,9 @@ bool FUBotMuJoCoSolver::ApplyInputs(int64 Id, const FUBotPhysicsInputs& Input, F
             return false;
         }
         Seen.Add(A.Id);
-        if (Found->Limited)
-            for (double V : A.Values)
-                if (V < Found->Minimum || V > Found->Maximum)
+        for (int32 K = 0; K < A.Values.Num(); ++K)
+            if (Found->InputLimited[K])
+                if (A.Values[K] < Found->InputMinimum[K] || A.Values[K] > Found->InputMaximum[K])
                 {
                     Error = INVTEXT("Actuator input is outside its authored range.");
                     return false;
@@ -472,8 +472,11 @@ bool FUBotMuJoCoSolver::GetActuators(int64 Id, TArray<FUBotMuJoCoActuatorDescrip
         auto& Value = Result.AddDefaulted_GetRef();
         Value.Name = UTF8_TO_TCHAR(A.Name.c_str());
         Value.InputCount = A.InputCount;
-        Value.bLimited = A.Limited;
-        Value.Range = FVector2D(A.Minimum, A.Maximum);
+        for (int32 K = 0; K < A.InputCount; ++K)
+        {
+            Value.InputLimited.Add(A.InputLimited[K]);
+            Value.InputRanges.Add(FVector2D(A.InputMinimum[K], A.InputMaximum[K]));
+        }
     }
     Out = MoveTemp(Result);
     return true;

@@ -238,4 +238,45 @@ bool FUBotMuJoCoLongRunClockTest::RunTest(const FString& Parameters)
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUBotMuJoCoModelFrameTest, "UBotMuJoCo.Adapter.ModelFrameGeometry",
+                                 EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUBotMuJoCoModelFrameTest::RunTest(const FString& Parameters)
+{
+    UBot::MuJoCo::Native::Configuration Config;
+    Config.Gravity = {0, 0, 0};
+    FUBotMuJoCoSolver Solver(Config, false);
+    FUBotPhysicsModelInstanceDesc Desc;
+    Desc.InstanceId = 1;
+    Desc.Model = MakeQuaternionModel();
+    // Common identities are arbitrary. The string "world" must not change an ordinary body's meaning.
+    Desc.Model.Bodies[0].Id = TEXT("world");
+    Desc.Model.Bodies[1].ParentId = TEXT("world");
+    Desc.Model.Joints[0].BodyId = TEXT("world");
+    FUBotPhysicsModelGeometry Floor;
+    Floor.Id = TEXT("ground");
+    Floor.Type = EUBotPhysicsGeometryType::Box;
+    Floor.Size = FVector(5.0, 5.0, 0.1);
+    Floor.LocalTransform.SetTranslation(FVector(0.0, 0.0, -5.0));
+    Desc.Model.Geometries.Add(Floor); // Empty BodyId is explicitly the model frame.
+    FUBotPhysicsModelBodyBindingDesc Display;
+    Display.BodyId = TEXT("world");
+    Desc.BodyBindings.Add(Display);
+    FUBotPhysicsModelInstanceResult Result;
+    FText Error;
+    if (!TestTrue(TEXT("Compile legal model frame geometry and arbitrary body ID"),
+                  Solver.AddModel(Desc, Result, Error)))
+    {
+        AddError(Error.ToString());
+        return false;
+    }
+    TestTrue(TEXT("Step compiled model"), Solver.Step(0.002, Error));
+    FUBotBodyState State;
+    TestTrue(TEXT("Ordinary body named world still publishes dynamic state"),
+             Solver.GetBodyState(Result.Bodies[0].Handle, State));
+    TestTrue(TEXT("Ordinary body's free coordinates are honored"),
+             State.PositionMeters.Equals(FVector(1.0, 2.0, 3.0), 1.e-8));
+    return true;
+}
+
 #endif
