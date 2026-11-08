@@ -3,7 +3,7 @@
 #include "CoreMinimal.h"
 #include "Modules/ModuleInterface.h"
 
-DECLARE_LOG_CATEGORY_EXTERN(LogUBotMuJoCo, Log, All);
+UBOTMUJOCO_API DECLARE_LOG_CATEGORY_EXTERN(LogUBotMuJoCo, Log, All);
 
 namespace UBot::MuJoCo
 {
