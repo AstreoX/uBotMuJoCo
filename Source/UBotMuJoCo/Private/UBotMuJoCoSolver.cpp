@@ -3,6 +3,7 @@
 #include "UBotMuJoCo.h"
 #include "UBotMuJoCoConversion.h"
 #include "UBotMuJoCoModelData.h"
+#include "Components/PrimitiveComponent.h"
 
 #include <algorithm>
 #include <limits>
@@ -449,9 +450,22 @@ bool FUBotMuJoCoSolver::UpdateScene(const FUBotPhysicsSceneUpdate& Update, FText
 {
     auto Next = ForeignBodies;
     for (int64 Id : Update.Removed)
+    {
         Next.Remove(Id);
+        ReportedRestitutionBodies.Remove(Id);
+    }
     for (const auto& Body : Update.Added)
+    {
         Next.Add(Body.Id, Body);
+        if (!FMath::IsNearlyZero(Body.Restitution) && !ReportedRestitutionBodies.Contains(Body.Id))
+        {
+            ReportedRestitutionBodies.Add(Body.Id);
+            UE_LOG(LogUBotMuJoCo, Warning,
+                   TEXT("Scene collider '%s' (id %lld) has UE restitution %g. MuJoCo uses its native compliant contact "
+                        "model; the UE restitution coefficient has no direct equivalent and is not transferred."),
+                   *GetNameSafe(Body.Component.Get()), Body.Id, Body.Restitution);
+        }
+    }
     for (const auto& P : Update.KinematicPoses)
         if (auto* Body = Next.Find(P.Id))
             Body->WorldTransform = P.WorldTransform;

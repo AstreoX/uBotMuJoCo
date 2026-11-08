@@ -288,4 +288,40 @@ bool FUBotMuJoCoModelFrameTest::RunTest(const FString& Parameters)
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUBotMuJoCoRestitutionDiagnosticTest, "UBotMuJoCo.Adapter.SceneRestitutionDiagnostic",
+                                 EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUBotMuJoCoRestitutionDiagnosticTest::RunTest(const FString& Parameters)
+{
+    UBot::MuJoCo::Native::Configuration Config;
+    Config.Gravity = {0, 0, 0};
+    FUBotMuJoCoSolver Solver(Config, false);
+    FUBotPhysicsModelInstanceDesc Desc;
+    Desc.InstanceId = 1;
+    Desc.Model = MakeQuaternionModel();
+    FUBotPhysicsModelInstanceResult Result;
+    FText Error;
+    if (!TestTrue(TEXT("Register scene diagnostic model"), Solver.AddModel(Desc, Result, Error)))
+        return false;
+    FUBotPhysicsSceneUpdate Update;
+    FUBotPhysicsSceneBody Body;
+    Body.Id = 77;
+    Body.Restitution = 0.5;
+    Body.Friction = 0.4;
+    Body.WorldTransform.SetTranslation(FVector(0.0, 0.0, -5.0));
+    FUBotPhysicsShape Shape;
+    Shape.Type = EUBotPhysicsShapeType::Box;
+    Shape.Size = FVector(5.0, 5.0, 0.1);
+    Body.Shapes.Add(Shape);
+    Update.Added.Add(Body);
+    AddExpectedMessagePlain(TEXT("the UE restitution coefficient has no direct equivalent and is not transferred"),
+                            ELogVerbosity::Warning, EAutomationExpectedMessageFlags::Contains, 1);
+    TestTrue(TEXT("Ordinary scene material remains usable with an explicit conversion report"),
+             Solver.UpdateScene(Update, Error));
+    TestTrue(TEXT("Repeated delivery does not repeat the collider warning"), Solver.UpdateScene(Update, Error));
+    TestTrue(TEXT("Frames without new colliders do not repeat the warning"),
+             Solver.UpdateScene(FUBotPhysicsSceneUpdate(), Error));
+    return true;
+}
+
 #endif
