@@ -30,7 +30,7 @@ Resource Read(const std::filesystem::path &P)
     R.Bytes.assign(std::istreambuf_iterator<char>(F), {});
     return R;
 }
-void Reference(const std::filesystem::path &Path, const std::string &Motor)
+void Reference(const std::filesystem::path &Path, const std::string &Motor, bool RequireContact = false)
 {
     Resource R = Read(Path);
     ImportResult I;
@@ -73,6 +73,7 @@ void Reference(const std::filesystem::path &Path, const std::string &Motor)
         std::copy(FreeV, FreeV + 6, D->qvel + M->jnt_dofadr[Free]);
     }
     Inputs Input;
+    bool SawContact = false;
     if (!Motor.empty())
     {
         Input.Actuators.push_back({1, Motor, {0.37}});
@@ -89,6 +90,7 @@ void Reference(const std::filesystem::path &Path, const std::string &Motor)
         }
         mj_step(M, D);
         mj_forward(M, D);
+        SawContact |= D->ncon > 0;
         Check(S.Step(Input, Error), "Step: " + Error);
         for (const Joint &J : I.Value.Joints)
         {
@@ -108,10 +110,12 @@ void Reference(const std::filesystem::path &Path, const std::string &Motor)
             }
         }
     }
+    Check(!RequireContact || SawContact, "contact fixture never produced a native contact before migration");
     const double Before = S.GetTimeSeconds();
     auto Models = std::vector<Instance>{{1, I.Value, {}}, {2, I.Value, {{3, 0, 0}, {}}}};
     Check(S.SetModels(Models, C, true, Error), "Preserve adding instance: " + Error);
     Check(std::abs(S.GetTimeSeconds() - Before) < 1e-12, "migration changed time");
+    bool SawMigratedContact = false;
     for (int Step = 100; Step < 120; ++Step)
     {
         if (!Motor.empty())
@@ -123,15 +127,21 @@ void Reference(const std::filesystem::path &Path, const std::string &Motor)
         Check(S.Step(Input, Error), "post migration step: " + Error);
         mj_step(M, D);
         mj_forward(M, D);
+        SawMigratedContact |= D->ncon > 0;
         for (const Joint &J : I.Value.Joints)
         {
             JointState V;
-            S.GetJointState(1, J.Id, V);
+            Check(S.GetJointState(1, J.Id, V), "missing joint after migration");
             int N = mj_name2id(M, mjOBJ_JOINT, J.Name.c_str());
             for (std::size_t K = 0; K < V.Position.size(); ++K)
             {
                 Check(std::abs(V.Position[K] - D->qpos[M->jnt_qposadr[N] + K]) < 1e-8,
                       "migration lost native dynamic state");
+            }
+            for (std::size_t K = 0; K < V.Velocity.size(); ++K)
+            {
+                Check(std::abs(V.Velocity[K] - D->qvel[M->jnt_dofadr[N] + K]) < 1e-8,
+                      "migration changed native velocity");
             }
         }
         if (M->na)
@@ -153,6 +163,7 @@ void Reference(const std::filesystem::path &Path, const std::string &Motor)
             }
         }
     }
+    Check(!RequireContact || SawMigratedContact, "contact fixture lost all native contact after migration");
     // An invalid candidate must leave the current scene available and time unchanged.
     const double GoodTime = S.GetTimeSeconds();
     Models[1].Value.Bodies[1].Mass = -1;
@@ -553,6 +564,7 @@ int main(int argc, char **argv)
         Reference(Root / "pendulum.xml", "motor");
         Reference(Root / "coupled.xml", "filtered");
         Reference(Root / "free_ball.xml", "");
+        Reference(Root / "contact.xml", "", true);
         FramesAndForces(Root / "offset.xml");
         MeshNormalization(Root / "mesh.xml");
         URDF(Root / "mimic.urdf");

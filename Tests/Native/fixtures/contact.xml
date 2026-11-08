@@ -1,0 +1,11 @@
+<mujoco model="sphere_contact">
+  <compiler angle="radian"/>
+  <option timestep="0.002" gravity="0 0 -9.81"/>
+  <worldbody>
+    <geom name="floor" type="box" pos="0 0 -0.1" size="1 1 0.1"/>
+    <body name="sphere" pos="0 0 0.11">
+      <freejoint name="sphere_free"/>
+      <geom name="sphere_shape" type="sphere" size="0.1" mass="1"/>
+    </body>
+  </worldbody>
+</mujoco>
