@@ -1,0 +1,1041 @@
+{
+  "format": 1,
+  "plugin": "UBotMuJoCo",
+  "version": "0.1.0",
+  "engine": "5.5",
+  "repository": "https://github.com/AstreoX/uBotMuJoCo",
+  "generator": "UBotDocExport 1",
+  "culture": "en",
+  "modules": [
+    {
+      "name": "UBotMuJoCoNative",
+      "type": "Runtime"
+    },
+    {
+      "name": "UBotMuJoCo",
+      "type": "Runtime"
+    },
+    {
+      "name": "UBotMuJoCoEditor",
+      "type": "Editor"
+    }
+  ],
+  "classes": [
+    {
+      "id": "AUBotMuJoCoWorldSettings",
+      "displayName": "UBot Mu Jo Co World Settings",
+      "kind": "actor",
+      "parent": "AInfo",
+      "module": "UBotMuJoCo",
+      "header": "Source/UBotMuJoCo/Public/UBotMuJoCoWorldSettings.h",
+      "category": "",
+      "tooltip": "Optional world-local configuration. Place at most one; its configuration is frozen when the solver is created.",
+      "flags": {
+        "abstract": false,
+        "blueprintType": true,
+        "blueprintable": false,
+        "spawnable": true,
+        "deprecated": false
+      },
+      "properties": [
+        {
+          "id": "SolverPreset",
+          "displayName": "Solver Preset",
+          "type": {
+            "category": "object",
+            "subtype": "UUBotMuJoCoSolverPreset",
+            "subtypeDisplay": "UBot Mu Jo Co Solver Preset",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "None",
+          "category": "MuJoCo",
+          "access": "readOnly",
+          "editable": "anywhere",
+          "tooltip": "Global native configuration. Without a preset, use 0.002 seconds and this World's gravity.",
+          "meta": {}
+        },
+        {
+          "id": "bAllowSceneMeshConvexApproximation",
+          "displayName": "Allow Scene Mesh Convex Approximation",
+          "type": {
+            "category": "bool",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "False",
+          "category": "MuJoCo",
+          "access": "readOnly",
+          "editable": "anywhere",
+          "tooltip": "Explicitly approximate exported triangle-mesh collision with its convex hull.",
+          "meta": {}
+        },
+        {
+          "id": "bAllowWorldOptionsOverride",
+          "displayName": "Allow World Options Override",
+          "type": {
+            "category": "bool",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "False",
+          "category": "MuJoCo",
+          "access": "readOnly",
+          "editable": "anywhere",
+          "tooltip": "Explicitly permit World configuration to replace conflicting imported global options.",
+          "meta": {}
+        }
+      ],
+      "nodes": []
+    },
+    {
+      "id": "UUBotMuJoCoLibrary",
+      "displayName": "UBot Mu Jo Co Library",
+      "kind": "library",
+      "parent": "UBlueprintFunctionLibrary",
+      "module": "UBotMuJoCo",
+      "header": "Source/UBotMuJoCo/Public/UBotMuJoCoLibrary.h",
+      "category": "",
+      "tooltip": "Native read-only queries; ordinary body and joint state is supplied by Physics. Game thread only.",
+      "flags": {
+        "abstract": false,
+        "blueprintType": false,
+        "blueprintable": false,
+        "spawnable": false,
+        "deprecated": false
+      },
+      "properties": [],
+      "nodes": [
+        "UUBotMuJoCoLibrary.GetActuatorActivation",
+        "UUBotMuJoCoLibrary.GetActuators",
+        "UUBotMuJoCoLibrary.GetSensorValues"
+      ]
+    },
+    {
+      "id": "UUBotMuJoCoModelData",
+      "displayName": "UBot Mu Jo Co Model Data",
+      "kind": "object",
+      "parent": "UUBotPhysicsModelExtension",
+      "module": "UBotMuJoCo",
+      "header": "Source/UBotMuJoCo/Public/UBotMuJoCoModelData.h",
+      "category": "",
+      "tooltip": "Exclusive native semantics; common physical properties live only in the Physics model.",
+      "flags": {
+        "abstract": false,
+        "blueprintType": true,
+        "blueprintable": false,
+        "spawnable": false,
+        "deprecated": false
+      },
+      "properties": [
+        {
+          "id": "Backend",
+          "displayName": "Backend",
+          "type": {
+            "category": "name",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "MuJoCo",
+          "category": "Physics",
+          "access": "readOnly",
+          "editable": "none",
+          "tooltip": "Required backend. None is invalid for an extension.",
+          "meta": {}
+        },
+        {
+          "id": "ImportMessages",
+          "displayName": "Import Messages",
+          "type": {
+            "category": "string",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "array",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "",
+          "category": "MuJoCo",
+          "access": "readOnly",
+          "editable": "none",
+          "tooltip": "Import diagnostics describing supported, approximated or rejected features.",
+          "meta": {}
+        },
+        {
+          "id": "SourceFilename",
+          "displayName": "Source Filename",
+          "type": {
+            "category": "string",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "",
+          "category": "Import",
+          "access": "none",
+          "editable": "none",
+          "tooltip": "Source basename for reimport. Absolute source paths are session-local editor data.",
+          "meta": {}
+        },
+        {
+          "id": "SuggestedPreset",
+          "displayName": "Suggested Preset",
+          "type": {
+            "category": "object",
+            "subtype": "UUBotMuJoCoSolverPreset",
+            "subtypeDisplay": "UBot Mu Jo Co Solver Preset",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "None",
+          "category": "MuJoCo",
+          "access": "readOnly",
+          "editable": "none",
+          "tooltip": "Imported global options. Select this preset on the world's settings actor for native-equivalent settings.",
+          "meta": {}
+        }
+      ],
+      "nodes": []
+    },
+    {
+      "id": "UUBotMuJoCoSolverPreset",
+      "displayName": "UBot Mu Jo Co Solver Preset",
+      "kind": "object",
+      "parent": "UDataAsset",
+      "module": "UBotMuJoCo",
+      "header": "Source/UBotMuJoCo/Public/UBotMuJoCoModelData.h",
+      "category": "",
+      "tooltip": "Immutable global native solver settings. Imported models produce a suggested preset.",
+      "flags": {
+        "abstract": false,
+        "blueprintType": true,
+        "blueprintable": false,
+        "spawnable": false,
+        "deprecated": false
+      },
+      "properties": [
+        {
+          "id": "GravityMetersPerSecondSquared",
+          "displayName": "Gravity Meters Per Second Squared",
+          "type": {
+            "category": "vector",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "(X=0.000000,Y=0.000000,Z=-9.810000)",
+          "category": "MuJoCo",
+          "access": "readOnly",
+          "editable": "anywhere",
+          "tooltip": "Gravity in world UE axes, m/s squared.",
+          "meta": {}
+        },
+        {
+          "id": "NativeOptions",
+          "displayName": "Native Options",
+          "type": {
+            "category": "string",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "",
+          "category": "MuJoCo",
+          "access": "none",
+          "editable": "none",
+          "tooltip": "Exclusive native solver options preserved by the importer.",
+          "meta": {}
+        },
+        {
+          "id": "StepSeconds",
+          "displayName": "Step Seconds",
+          "type": {
+            "category": "double",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "0.002000",
+          "category": "MuJoCo",
+          "access": "readOnly",
+          "editable": "anywhere",
+          "tooltip": "Fixed integration interval, seconds; changing it requires a new solver.",
+          "meta": {
+            "ClampMin": "0.0001",
+            "ClampMax": "100"
+          }
+        }
+      ],
+      "nodes": []
+    }
+  ],
+  "nodes": [
+    {
+      "id": "Break:FUBotMuJoCoActuatorDescription",
+      "kind": "break",
+      "title": "Break UBot Mu Jo Co Actuator Description",
+      "subtitle": "",
+      "owner": "",
+      "member": "",
+      "category": "Utilities|Struct",
+      "tooltip": "Adds a node that breaks a 'UBot Mu Jo Co Actuator Description' into its member fields",
+      "keywords": "",
+      "flags": {
+        "static": false,
+        "latent": false,
+        "deprecated": false,
+        "developmentOnly": false,
+        "callInEditor": false,
+        "compact": false
+      },
+      "compactTitle": "",
+      "inputs": [
+        {
+          "id": "UBotMuJoCoActuatorDescription",
+          "name": "UBot Mu Jo Co Actuator Description",
+          "type": {
+            "category": "struct",
+            "subtype": "FUBotMuJoCoActuatorDescription",
+            "subtypeDisplay": "UBot Mu Jo Co Actuator Description",
+            "container": "none",
+            "valueType": null,
+            "byRef": true,
+            "const": true
+          },
+          "default": "",
+          "advanced": false,
+          "tooltip": ""
+        }
+      ],
+      "outputs": [
+        {
+          "id": "Name",
+          "name": "Name",
+          "type": {
+            "category": "string",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "",
+          "advanced": false,
+          "tooltip": "Native actuator name inside its model instance."
+        },
+        {
+          "id": "InputCount",
+          "name": "Input Count",
+          "type": {
+            "category": "int",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "",
+          "advanced": false,
+          "tooltip": "Number of simultaneous inputs accepted by this actuator."
+        },
+        {
+          "id": "InputLimited",
+          "name": "Input Limited",
+          "type": {
+            "category": "bool",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "array",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "",
+          "advanced": false,
+          "tooltip": "Whether each authored control channel has an enforced range."
+        },
+        {
+          "id": "InputRanges",
+          "name": "Input Ranges",
+          "type": {
+            "category": "struct",
+            "subtype": "FVector2D",
+            "subtypeDisplay": "Vector 2D",
+            "container": "array",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "",
+          "advanced": false,
+          "tooltip": "One native range per input channel, in that channel's authored units."
+        }
+      ]
+    },
+    {
+      "id": "Break:FUBotMuJoCoNativeValues",
+      "kind": "break",
+      "title": "Break UBot Mu Jo Co Native Values",
+      "subtitle": "",
+      "owner": "",
+      "member": "",
+      "category": "Utilities|Struct",
+      "tooltip": "Adds a node that breaks a 'UBot Mu Jo Co Native Values' into its member fields",
+      "keywords": "",
+      "flags": {
+        "static": false,
+        "latent": false,
+        "deprecated": false,
+        "developmentOnly": false,
+        "callInEditor": false,
+        "compact": false
+      },
+      "compactTitle": "",
+      "inputs": [
+        {
+          "id": "UBotMuJoCoNativeValues",
+          "name": "UBot Mu Jo Co Native Values",
+          "type": {
+            "category": "struct",
+            "subtype": "FUBotMuJoCoNativeValues",
+            "subtypeDisplay": "UBot Mu Jo Co Native Values",
+            "container": "none",
+            "valueType": null,
+            "byRef": true,
+            "const": true
+          },
+          "default": "",
+          "advanced": false,
+          "tooltip": ""
+        }
+      ],
+      "outputs": [
+        {
+          "id": "Values",
+          "name": "Values",
+          "type": {
+            "category": "double",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "array",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "",
+          "advanced": false,
+          "tooltip": "Values in the native model's declared layout. Sensor spatial quantities retain right-handed axes."
+        },
+        {
+          "id": "TimestampSeconds",
+          "name": "Timestamp Seconds",
+          "type": {
+            "category": "double",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "",
+          "advanced": false,
+          "tooltip": "uBot simulation time of the last successfully integrated endpoint."
+        }
+      ]
+    },
+    {
+      "id": "Break:FUBotMuJoCoResource",
+      "kind": "break",
+      "title": "Break UBot Mu Jo Co Resource",
+      "subtitle": "",
+      "owner": "",
+      "member": "",
+      "category": "Utilities|Struct",
+      "tooltip": "Adds a node that breaks a 'UBot Mu Jo Co Resource' into its member fields",
+      "keywords": "",
+      "flags": {
+        "static": false,
+        "latent": false,
+        "deprecated": false,
+        "developmentOnly": false,
+        "callInEditor": false,
+        "compact": false
+      },
+      "compactTitle": "",
+      "inputs": [
+        {
+          "id": "UBotMuJoCoResource",
+          "name": "UBot Mu Jo Co Resource",
+          "type": {
+            "category": "struct",
+            "subtype": "FUBotMuJoCoResource",
+            "subtypeDisplay": "UBot Mu Jo Co Resource",
+            "container": "none",
+            "valueType": null,
+            "byRef": true,
+            "const": true
+          },
+          "default": "",
+          "advanced": false,
+          "tooltip": ""
+        }
+      ],
+      "outputs": [
+        {
+          "id": "Name",
+          "name": "Name",
+          "type": {
+            "category": "string",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "",
+          "advanced": false,
+          "tooltip": "Relative virtual filename. Source machine paths are not stored."
+        }
+      ]
+    },
+    {
+      "id": "Make:FUBotMuJoCoActuatorDescription",
+      "kind": "make",
+      "title": "Make UBot Mu Jo Co Actuator Description",
+      "subtitle": "",
+      "owner": "",
+      "member": "",
+      "category": "Utilities|Struct",
+      "tooltip": "Adds a node that create a 'UBot Mu Jo Co Actuator Description' from its members",
+      "keywords": "",
+      "flags": {
+        "static": false,
+        "latent": false,
+        "deprecated": false,
+        "developmentOnly": false,
+        "callInEditor": false,
+        "compact": false
+      },
+      "compactTitle": "",
+      "inputs": [],
+      "outputs": [
+        {
+          "id": "UBotMuJoCoActuatorDescription",
+          "name": "UBot Mu Jo Co Actuator Description",
+          "type": {
+            "category": "struct",
+            "subtype": "FUBotMuJoCoActuatorDescription",
+            "subtypeDisplay": "UBot Mu Jo Co Actuator Description",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "",
+          "advanced": false,
+          "tooltip": ""
+        }
+      ]
+    },
+    {
+      "id": "Make:FUBotMuJoCoNativeValues",
+      "kind": "make",
+      "title": "Make UBot Mu Jo Co Native Values",
+      "subtitle": "",
+      "owner": "",
+      "member": "",
+      "category": "Utilities|Struct",
+      "tooltip": "Adds a node that create a 'UBot Mu Jo Co Native Values' from its members",
+      "keywords": "",
+      "flags": {
+        "static": false,
+        "latent": false,
+        "deprecated": false,
+        "developmentOnly": false,
+        "callInEditor": false,
+        "compact": false
+      },
+      "compactTitle": "",
+      "inputs": [],
+      "outputs": [
+        {
+          "id": "UBotMuJoCoNativeValues",
+          "name": "UBot Mu Jo Co Native Values",
+          "type": {
+            "category": "struct",
+            "subtype": "FUBotMuJoCoNativeValues",
+            "subtypeDisplay": "UBot Mu Jo Co Native Values",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "",
+          "advanced": false,
+          "tooltip": ""
+        }
+      ]
+    },
+    {
+      "id": "Make:FUBotMuJoCoResource",
+      "kind": "make",
+      "title": "Make UBot Mu Jo Co Resource",
+      "subtitle": "",
+      "owner": "",
+      "member": "",
+      "category": "Utilities|Struct",
+      "tooltip": "Adds a node that create a 'UBot Mu Jo Co Resource' from its members",
+      "keywords": "",
+      "flags": {
+        "static": false,
+        "latent": false,
+        "deprecated": false,
+        "developmentOnly": false,
+        "callInEditor": false,
+        "compact": false
+      },
+      "compactTitle": "",
+      "inputs": [],
+      "outputs": [
+        {
+          "id": "UBotMuJoCoResource",
+          "name": "UBot Mu Jo Co Resource",
+          "type": {
+            "category": "struct",
+            "subtype": "FUBotMuJoCoResource",
+            "subtypeDisplay": "UBot Mu Jo Co Resource",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "",
+          "advanced": false,
+          "tooltip": ""
+        }
+      ]
+    },
+    {
+      "id": "UUBotMuJoCoLibrary.GetActuatorActivation",
+      "kind": "pure",
+      "title": "Get MuJoCo Actuator Activation",
+      "subtitle": "",
+      "owner": "UUBotMuJoCoLibrary",
+      "member": "GetActuatorActivation",
+      "category": "uBot|MuJoCo",
+      "tooltip": "Reads native actuator activation state. False before a step, after reset, or for an unknown name.",
+      "keywords": "",
+      "flags": {
+        "static": true,
+        "latent": false,
+        "deprecated": false,
+        "developmentOnly": false,
+        "callInEditor": false,
+        "compact": false
+      },
+      "compactTitle": "",
+      "inputs": [
+        {
+          "id": "Binding",
+          "name": "Binding",
+          "type": {
+            "category": "object",
+            "subtype": "UUBotPhysicsBindingComponent",
+            "subtypeDisplay": "uBot Physics Binding",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": true
+          },
+          "default": "",
+          "advanced": false,
+          "tooltip": ""
+        },
+        {
+          "id": "ActuatorName",
+          "name": "Actuator Name",
+          "type": {
+            "category": "string",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "",
+          "advanced": false,
+          "tooltip": ""
+        }
+      ],
+      "outputs": [
+        {
+          "id": "OutState",
+          "name": "Out State",
+          "type": {
+            "category": "struct",
+            "subtype": "FUBotMuJoCoNativeValues",
+            "subtypeDisplay": "UBot Mu Jo Co Native Values",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "",
+          "advanced": false,
+          "tooltip": ""
+        },
+        {
+          "id": "ReturnValue",
+          "name": "Return Value",
+          "type": {
+            "category": "bool",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "",
+          "advanced": false,
+          "tooltip": ""
+        }
+      ]
+    },
+    {
+      "id": "UUBotMuJoCoLibrary.GetActuators",
+      "kind": "pure",
+      "title": "Get MuJoCo Actuators",
+      "subtitle": "",
+      "owner": "UUBotMuJoCoLibrary",
+      "member": "GetActuators",
+      "category": "uBot|MuJoCo",
+      "tooltip": "Returns actuator layouts for this binding's active MuJoCo instance.",
+      "keywords": "",
+      "flags": {
+        "static": true,
+        "latent": false,
+        "deprecated": false,
+        "developmentOnly": false,
+        "callInEditor": false,
+        "compact": false
+      },
+      "compactTitle": "",
+      "inputs": [
+        {
+          "id": "Binding",
+          "name": "Binding",
+          "type": {
+            "category": "object",
+            "subtype": "UUBotPhysicsBindingComponent",
+            "subtypeDisplay": "uBot Physics Binding",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": true
+          },
+          "default": "",
+          "advanced": false,
+          "tooltip": ""
+        }
+      ],
+      "outputs": [
+        {
+          "id": "OutActuators",
+          "name": "Out Actuators",
+          "type": {
+            "category": "struct",
+            "subtype": "FUBotMuJoCoActuatorDescription",
+            "subtypeDisplay": "UBot Mu Jo Co Actuator Description",
+            "container": "array",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "",
+          "advanced": false,
+          "tooltip": ""
+        },
+        {
+          "id": "ReturnValue",
+          "name": "Return Value",
+          "type": {
+            "category": "bool",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "",
+          "advanced": false,
+          "tooltip": ""
+        }
+      ]
+    },
+    {
+      "id": "UUBotMuJoCoLibrary.GetSensorValues",
+      "kind": "pure",
+      "title": "Get MuJoCo Sensor Values",
+      "subtitle": "",
+      "owner": "UUBotMuJoCoLibrary",
+      "member": "GetSensorValues",
+      "category": "uBot|MuJoCo",
+      "tooltip": "Reads one native numeric sensor, preserving its native layout, units and right-handed convention.",
+      "keywords": "",
+      "flags": {
+        "static": true,
+        "latent": false,
+        "deprecated": false,
+        "developmentOnly": false,
+        "callInEditor": false,
+        "compact": false
+      },
+      "compactTitle": "",
+      "inputs": [
+        {
+          "id": "Binding",
+          "name": "Binding",
+          "type": {
+            "category": "object",
+            "subtype": "UUBotPhysicsBindingComponent",
+            "subtypeDisplay": "uBot Physics Binding",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": true
+          },
+          "default": "",
+          "advanced": false,
+          "tooltip": ""
+        },
+        {
+          "id": "SensorName",
+          "name": "Sensor Name",
+          "type": {
+            "category": "string",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "",
+          "advanced": false,
+          "tooltip": ""
+        }
+      ],
+      "outputs": [
+        {
+          "id": "OutState",
+          "name": "Out State",
+          "type": {
+            "category": "struct",
+            "subtype": "FUBotMuJoCoNativeValues",
+            "subtypeDisplay": "UBot Mu Jo Co Native Values",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "",
+          "advanced": false,
+          "tooltip": ""
+        },
+        {
+          "id": "ReturnValue",
+          "name": "Return Value",
+          "type": {
+            "category": "bool",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "",
+          "advanced": false,
+          "tooltip": ""
+        }
+      ]
+    }
+  ],
+  "structs": [
+    {
+      "id": "FUBotMuJoCoActuatorDescription",
+      "displayName": "UBot Mu Jo Co Actuator Description",
+      "module": "UBotMuJoCo",
+      "header": "Source/UBotMuJoCo/Public/UBotMuJoCoLibrary.h",
+      "tooltip": "Authored native actuator input layout; names remain case-sensitive.",
+      "fields": [
+        {
+          "id": "InputCount",
+          "displayName": "Input Count",
+          "type": {
+            "category": "int",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "tooltip": "Number of simultaneous inputs accepted by this actuator.",
+          "access": "readOnly"
+        },
+        {
+          "id": "InputLimited",
+          "displayName": "Input Limited",
+          "type": {
+            "category": "bool",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "array",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "tooltip": "Whether each authored control channel has an enforced range.",
+          "access": "readOnly"
+        },
+        {
+          "id": "InputRanges",
+          "displayName": "Input Ranges",
+          "type": {
+            "category": "struct",
+            "subtype": "FVector2D",
+            "subtypeDisplay": "Vector 2D",
+            "container": "array",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "tooltip": "One native range per input channel, in that channel's authored units.",
+          "access": "readOnly"
+        },
+        {
+          "id": "Name",
+          "displayName": "Name",
+          "type": {
+            "category": "string",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "tooltip": "Native actuator name inside its model instance.",
+          "access": "readOnly"
+        }
+      ],
+      "make": "Make:FUBotMuJoCoActuatorDescription",
+      "break": "Break:FUBotMuJoCoActuatorDescription"
+    },
+    {
+      "id": "FUBotMuJoCoNativeValues",
+      "displayName": "UBot Mu Jo Co Native Values",
+      "module": "UBotMuJoCo",
+      "header": "Source/UBotMuJoCo/Public/UBotMuJoCoLibrary.h",
+      "tooltip": "Read-only native endpoint values. These retain native sensor/activation units and conventions.",
+      "fields": [
+        {
+          "id": "TimestampSeconds",
+          "displayName": "Timestamp Seconds",
+          "type": {
+            "category": "double",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "tooltip": "uBot simulation time of the last successfully integrated endpoint.",
+          "access": "readOnly"
+        },
+        {
+          "id": "Values",
+          "displayName": "Values",
+          "type": {
+            "category": "double",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "array",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "tooltip": "Values in the native model's declared layout. Sensor spatial quantities retain right-handed axes.",
+          "access": "readOnly"
+        }
+      ],
+      "make": "Make:FUBotMuJoCoNativeValues",
+      "break": "Break:FUBotMuJoCoNativeValues"
+    },
+    {
+      "id": "FUBotMuJoCoResource",
+      "displayName": "UBot Mu Jo Co Resource",
+      "module": "UBotMuJoCo",
+      "header": "Source/UBotMuJoCo/Public/UBotMuJoCoModelData.h",
+      "tooltip": "One self-contained native mesh, texture or heightfield resource, addressed by virtual filename.",
+      "fields": [
+        {
+          "id": "Name",
+          "displayName": "Name",
+          "type": {
+            "category": "string",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "tooltip": "Relative virtual filename. Source machine paths are not stored.",
+          "access": "readOnly"
+        }
+      ],
+      "make": "Make:FUBotMuJoCoResource",
+      "break": "Break:FUBotMuJoCoResource"
+    }
+  ],
+  "enums": []
+}
