@@ -37,6 +37,22 @@ void Reference(const std::filesystem::path &Path, const std::string &Motor)
     std::string Error;
     Check(Import(R.Name, {R}, I, Error), "Import: " + Error);
     Check(I.Value.NativeData.find("fromto=") == std::string::npos, "shared pose retained in extension");
+    const bool OffsetBall = Path.filename() == "free_ball.xml";
+    if (OffsetBall)
+    {
+        for (Joint &J : I.Value.Joints)
+        {
+            if (J.Type == JointType::Ball)
+            {
+                J.InitialPosition = {0.9659258262890683, 0.2588190451025207, 0, 0};
+                J.InitialVelocity = {0.4, -0.2, 0.1};
+            }
+            else if (J.Type == JointType::Free)
+            {
+                J.InitialVelocity = {0.1, 0.2, 0.3, 0.3, 0.2, -0.1};
+            }
+        }
+    }
     Scene S;
     Configuration C;
     C.StepSeconds = I.Value.SuggestedStepSeconds;
@@ -47,6 +63,15 @@ void Reference(const std::filesystem::path &Path, const std::string &Motor)
     mjModel *M = mj_loadXML(Path.string().c_str(), nullptr, E, sizeof(E));
     Check(M != nullptr, E);
     mjData *D = mj_makeData(M);
+    if (OffsetBall)
+    {
+        const int Ball = mj_name2id(M, mjOBJ_JOINT, "ball_joint"), Free = mj_name2id(M, mjOBJ_JOINT, "root");
+        const double Q[4]{0.9659258262890683, 0.2588190451025207, 0, 0}, BallV[3]{0.4, -0.2, 0.1},
+            FreeV[6]{0.1, 0.2, 0.3, 0.3, 0.2, -0.1};
+        std::copy(Q, Q + 4, D->qpos + M->jnt_qposadr[Ball]);
+        std::copy(BallV, BallV + 3, D->qvel + M->jnt_dofadr[Ball]);
+        std::copy(FreeV, FreeV + 6, D->qvel + M->jnt_dofadr[Free]);
+    }
     Inputs Input;
     if (!Motor.empty())
     {
@@ -130,6 +155,16 @@ void Reference(const std::filesystem::path &Path, const std::string &Motor)
     Models[1].Value.Bodies[1].Mass = -1;
     Check(!S.SetModels(Models, C, true, Error), "bad candidate accepted");
     Check(S.GetTimeSeconds() == GoodTime, "failed compilation altered scene time");
+    Check(S.SetModels({{1, I.Value, {}}}, C, true, Error), Error);
+    BodyState GoneBody;
+    JointState GoneJoint;
+    Check(!S.GetBodyState(2, I.Value.Bodies.back().Id, GoneBody) &&
+              !S.GetJointState(2, I.Value.Joints.back().Id, GoneJoint),
+          "removed instance leaked published state");
+    Check(S.SetModels({{1, I.Value, {}}, {2, I.Value, {{3, 0, 0}, {}}}}, C, true, Error), Error);
+    Check(!S.GetBodyState(2, I.Value.Bodies.back().Id, GoneBody) &&
+              !S.GetJointState(2, I.Value.Joints.back().Id, GoneJoint),
+          "reused instance inherited old publication");
     Check(S.Reset("", Error), "Reset: " + Error);
     Check(S.GetTimeSeconds() == 0, "reset time");
     mj_deleteData(D);
@@ -332,6 +367,134 @@ void ClearInputs(const std::filesystem::path &Path)
     mj_deleteModel(M);
     std::cout << "complete input replacement clears controls and preserves activation passed\n";
 }
+
+void PlacedKeyframe(const std::filesystem::path &Path)
+{
+    Resource R = Read(Path);
+    ImportResult I;
+    std::string Error;
+    Check(Import(R.Name, {R}, I, Error), Error);
+    Scene S;
+    Configuration C;
+    C.Gravity = {0, 0, 0};
+    const double Half = std::sqrt(0.5);
+    Transform P{{3, 4, 0}, {0, 0, Half, Half}};
+    Check(S.SetModels({{1, I.Value, P}}, C, false, Error), Error);
+    Check(S.Reset("placed", Error), Error);
+    char E[2048]{};
+    mjModel *M = mj_loadXML(Path.string().c_str(), nullptr, E, sizeof(E));
+    Check(M != nullptr, E);
+    mjData *D = mj_makeData(M);
+    mj_resetDataKeyframe(M, D, 0);
+    // Rotate authored position (1,2,3) and velocity (1,2,3) 90 degrees, then translate position.
+    D->qpos[0] = 1;
+    D->qpos[1] = 5;
+    D->qpos[2] = 3;
+    D->qpos[3] = Half;
+    D->qpos[4] = 0;
+    D->qpos[5] = 0;
+    D->qpos[6] = Half;
+    D->qvel[0] = -2;
+    D->qvel[1] = 1;
+    D->qvel[2] = 3;
+    Check(S.Step({}, Error), Error);
+    mj_step(M, D);
+    mj_forward(M, D);
+    JointState J;
+    Check(S.GetJointState(1, "free_joint", J), "missing placed keyframe joint");
+    for (int K = 0; K < 7; ++K)
+    {
+        Check(std::abs(J.Position[K] - D->qpos[K]) < 1e-10, "keyframe placement mismatch K=" + std::to_string(K) +
+                                                                " native=" + std::to_string(J.Position[K]) +
+                                                                " expected=" + std::to_string(D->qpos[K]));
+    }
+    for (int K = 0; K < 6; ++K)
+    {
+        Check(std::abs(J.Velocity[K] - D->qvel[K]) < 1e-10, "keyframe velocity placement mismatch");
+    }
+    Check(std::abs(S.GetTimeSeconds() - 0.502) < 1e-12, "keyframe native time lost");
+    mj_deleteData(D);
+    mj_deleteModel(M);
+    std::cout << "placed free-root keyframe pose velocity and time passed\n";
+}
+
+void MultiInput(const std::filesystem::path &Path)
+{
+    Resource R = Read(Path);
+    ImportResult I;
+    std::string Error;
+    Check(Import(R.Name, {R}, I, Error), Error);
+    Configuration C;
+    C.Gravity = {0, 0, 0};
+    Scene S;
+    Check(S.SetModels({{1, I.Value, {}}}, C, false, Error), Error);
+    const auto Info = S.GetActuators(1);
+    Check(Info.size() == 2 && Info[0].InputCount == 3 && Info[1].InputCount == 1, "multi-input layout wrong");
+    Check(Info[0].InputLimited[0] && Info[0].InputLimited[1] && Info[0].InputLimited[2] &&
+              Info[0].InputMaximum[0] == 1 && Info[0].InputMaximum[1] == 2 && Info[0].InputMaximum[2] == 3 &&
+              Info[1].InputMaximum[0] == 4,
+          "per-channel ranges wrong");
+    char E[2048]{};
+    mjModel *M = mj_loadXML(Path.string().c_str(), nullptr, E, sizeof(E));
+    Check(M != nullptr, E);
+    mjData *D = mj_makeData(M);
+    Inputs Input;
+    Input.Actuators = {{1, "multi", {0.2, 1.7, 2.7}}, {1, "following", {3.7}}};
+    for (int Step = 0; Step < 20; ++Step)
+    {
+        D->ctrl[0] = 0.2;
+        D->ctrl[1] = 1.7;
+        D->ctrl[2] = 2.7;
+        D->ctrl[3] = 3.7;
+        mj_step(M, D);
+        mj_forward(M, D);
+        Check(S.Step(Input, Error), Error);
+        for (const Joint &J : I.Value.Joints)
+        {
+            JointState V;
+            Check(S.GetJointState(1, J.Id, V), "missing multi-input joint");
+            const int N = mj_name2id(M, mjOBJ_JOINT, J.Name.c_str());
+            Check(std::abs(V.Position[0] - D->qpos[M->jnt_qposadr[N]]) < 1e-10, "multi-input dynamics differ");
+        }
+    }
+    Input.Actuators[0].Values[1] = 2.1;
+    const double Last = S.GetTimeSeconds();
+    Check(!S.Step(Input, Error) && S.GetTimeSeconds() == Last, "per-channel invalid input accepted");
+    mj_deleteData(D);
+    mj_deleteModel(M);
+    std::cout << "multi-input ranges and following actuator native differential passed\n";
+}
+void UnreservedWorldName()
+{
+    Model V;
+    Body B;
+    B.Id = "world";
+    B.Name = "body_0";
+    B.Mass = 1;
+    B.DiagonalInertia = {1, 1, 1};
+    V.Bodies.push_back(B);
+    Joint J;
+    J.Id = "joint";
+    J.Name = "joint";
+    J.BodyId = "world";
+    J.Type = JointType::Free;
+    V.Joints.push_back(J);
+    Geometry G;
+    G.Id = "shape";
+    G.Name = "shape";
+    G.BodyId = "world";
+    G.Type = GeometryType::Sphere;
+    G.Size = {0.1, 0, 0};
+    V.Geometries.push_back(G);
+    Scene S;
+    Configuration C;
+    std::string Error;
+    Check(S.SetModels({{1, V, {}}}, C, false, Error), Error);
+    Check(S.Step({}, Error), Error);
+    BodyState State;
+    Check(S.GetBodyState(1, "world", State) && State.Pose.Position.Z < 0, "generic world name treated as model frame");
+    std::cout << "generic world identity is not reserved passed\n";
+}
 int main(int argc, char **argv)
 {
     try
@@ -348,6 +511,9 @@ int main(int argc, char **argv)
         Reference(Root / "mimic.urdf", "");
         BundledResources();
         ClearInputs(Root / "coupled.xml");
+        PlacedKeyframe(Root / "offset.xml");
+        MultiInput(Root / "multi_input.xml");
+        UnreservedWorldName();
         ImportResult I;
         std::string Error;
         Check(!Import("missing.xml", {}, I, Error), "Missing input accepted");
