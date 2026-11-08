@@ -46,4 +46,6 @@ MuJoCo 使用连续时间模式。超出每帧步数预算后暂停后端并报�
 
 在加载此插件的 UE 5.5 宿主中构建编辑器，然后运行 `Automation RunTests UBotMuJoCo`。原生数值测试位于 `Tests/Native`，可独立使用 CMake 与 Visual Studio 构建；测试以直接调用官方 MuJoCo 的输出作为对照。实际执行和结果应以对应构建日志为准。
 
+Win64 Cook 后的无渲染验证使用 `-NullRHI -sm5`，显式选择 SM5 可避开 UE 5.5 默认 SM6 NullRHI 的 Nanite 资源析构路径。真实渲染可使用 `-d3d11` 验证。
+
 许可证：本插件使用 [LICENSE](LICENSE)，第三方依赖遵循各自附带许可证。
