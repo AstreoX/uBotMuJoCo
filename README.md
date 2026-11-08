@@ -1,4 +1,12 @@
-# uBot MuJoCo
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/ubot-mark-light.svg">
+    <source media="(prefers-color-scheme: light)" srcset="docs/brand/ubot-mark-dark.svg">
+    <img alt="uBot MuJoCo" src="docs/brand/ubot-mark-dark.svg" height="88">
+  </picture>
+</p>
+<h1 align="center">uBot MuJoCo</h1>
+<p align="center"><b>为 Unreal Engine 提供原生 CPU MuJoCo 物理求解。</b></p>
 
 Unreal Engine 5.5 的原生 CPU MuJoCo 求解器，作为 uBot Physics 后端运行。开发版本为 `0.1.0`，依赖 uBot Core 与 uBot Physics `0.2.x`。目前尚未发布。
 
