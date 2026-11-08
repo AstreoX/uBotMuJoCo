@@ -10,9 +10,12 @@
 #include "UBotMuJoCoModelData.h"
 #include "UBotPhysicsModel.h"
 #include "XmlFile.h"
+#include "UObject/SoftObjectPath.h"
 
 namespace
 {
+// Shared by factory instances and never serialized into a model asset.
+TMap<FSoftObjectPath, FString> SessionSourcePaths;
 /** Collect only explicit dependencies. Never bundle the source directory wholesale. */
 struct FResourceCollector
 {
@@ -186,7 +189,7 @@ UObject* UUBotMuJoCoImportFactory::FactoryCreateFile(UClass* InClass, UObject* P
     Asset->Model.Extension = Extension;
     Asset->MarkPackageDirty();
     Preset->MarkPackageDirty();
-    SessionSourcePaths.Add(Asset, Filename);
+    SessionSourcePaths.Add(FSoftObjectPath(Asset), Filename);
     if (bNewPreset)
         FAssetRegistryModule::AssetCreated(Preset);
     return Asset;
@@ -198,7 +201,7 @@ bool UUBotMuJoCoImportFactory::CanReimport(UObject* Object, TArray<FString>& Fil
     const auto* Data = Asset ? Cast<UUBotMuJoCoModelData>(Asset->Model.Extension) : nullptr;
     if (!Data)
         return false;
-    if (const FString* Path = SessionSourcePaths.Find(Object))
+    if (const FString* Path = SessionSourcePaths.Find(FSoftObjectPath(Object)))
         Filenames.Add(*Path);
 #if WITH_EDITORONLY_DATA
     else
@@ -210,18 +213,31 @@ bool UUBotMuJoCoImportFactory::CanReimport(UObject* Object, TArray<FString>& Fil
 void UUBotMuJoCoImportFactory::SetReimportPaths(UObject* Object, const TArray<FString>& Paths)
 {
     if (Paths.Num() == 1)
-        SessionSourcePaths.Add(Object, Paths[0]);
+        SessionSourcePaths.Add(FSoftObjectPath(Object), Paths[0]);
 }
 
 EReimportResult::Type UUBotMuJoCoImportFactory::Reimport(UObject* Object)
 {
     auto* Asset = Cast<UUBotPhysicsModelAsset>(Object);
     auto* Data = Asset ? Cast<UUBotMuJoCoModelData>(Asset->Model.Extension) : nullptr;
-    const FString* Path = SessionSourcePaths.Find(Object);
-    if (!Data || !Path || !Data->SuggestedPreset)
+    if (!Data || !Data->SuggestedPreset)
         return EReimportResult::Failed;
+    FString Source;
+    if (const FString* Path = SessionSourcePaths.Find(FSoftObjectPath(Object)))
+        Source = *Path;
+#if WITH_EDITORONLY_DATA
+    else
+        Source = Data->SourceFilename;
+#endif
+    if (Source.IsEmpty() || !IFileManager::Get().FileExists(*Source))
+    {
+        UE_LOG(LogUBotMuJoCo, Error,
+               TEXT("Model reimport failed: the source is unavailable. Use Reimport With New File to locate the source "
+                    "document."));
+        return EReimportResult::Failed;
+    }
     FText Error;
-    if (!ImportAsset(*Path, *Asset, *Data->SuggestedPreset, Error))
+    if (!ImportAsset(Source, *Asset, *Data->SuggestedPreset, Error))
     {
         UE_LOG(LogUBotMuJoCo, Error, TEXT("Model reimport failed: %s"), *Error.ToString());
         return EReimportResult::Failed;

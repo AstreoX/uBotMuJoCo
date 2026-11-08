@@ -41,6 +41,12 @@ bool FUBotMuJoCoEditorImportTest::RunTest(const FString& Parameters)
     TArray<FString> Sources;
     TestTrue(TEXT("Reimport recognized"), Factory->CanReimport(Asset, Sources));
     TestEqual(TEXT("Session source retained"), Sources.Num(), 1);
+    auto* FreshFactory = NewObject<UUBotMuJoCoImportFactory>();
+    TArray<FString> FreshSources;
+    TestTrue(TEXT("Fresh factory recognizes model"), FreshFactory->CanReimport(Asset, FreshSources));
+    TestTrue(TEXT("Session source survives factory recreation"),
+             FreshSources.Num() == 1 && FreshSources[0] == Filename);
+    TestTrue(TEXT("Fresh factory can reimport"), FreshFactory->Reimport(Asset) == EReimportResult::Succeeded);
     TestTrue(TEXT("Reimport succeeds"), Factory->Reimport(Asset) == EReimportResult::Succeeded);
     TestTrue(TEXT("Reimport creates a new definition revision"), Asset->Model.Revision != OldRevision);
     TestEqual(TEXT("Stable source body retains identity"), Asset->Model.Bodies[0].Id, OldBodyId);

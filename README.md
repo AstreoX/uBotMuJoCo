@@ -18,7 +18,7 @@ Unreal Engine 5.5 的原生 CPU MuJoCo 求解器，作为 uBot Physics 后端运
 
 导入模型的物理属性通过修改源文件后重新导入更新。运行中的实例保留自己的定义，需移除并重新绑定才使用新版。成功重导入产生新版本，源元素标识保持稳定；失败保留现有资产。
 
-导入器仅收集显式引用的文件，包括相对路径的 include、mesh、texture 和 heightfield。资源随资产打包，运行时通过虚拟文件系统加载。绝对引用和 `package://` URI 应先改为相对文件。重新导入的完整路径只保留在当前编辑器会话；资产仅保存源文件名，重启后可通过重新导入选择源文件。
+导入器仅收集显式引用的文件，包括相对路径的 include、mesh、texture 和 heightfield。资源随资产打包，运行时通过虚拟文件系统加载。绝对引用和 `package://` URI 应先改为相对文件。重新导入的完整路径只保留在当前编辑器会话；资产仅保存源文件名，重启后使用 **Reimport With New File** 重新定位源文件。
 
 当前接入面向 MuJoCo 的原生刚体／关节模型，保留原生约束、tendon、参考值、keyframe 及内置 actuator 的相关语义。URDF 以固定版本 MuJoCo 解析器的能力为准，不承诺任意 ROS URDF 扩展。flex、skin、外部插件和用户回调会拒绝导入。
 

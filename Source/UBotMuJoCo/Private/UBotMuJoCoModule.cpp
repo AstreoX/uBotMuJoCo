@@ -36,6 +36,11 @@ public:
     }
     virtual TSharedPtr<IUBotPhysicsSolver> CreateSolver(UWorld& World) override
     {
+        for (auto It = Solvers.CreateIterator(); It; ++It)
+        {
+            if (!It.Key().IsValid() || !It.Value().IsValid())
+                It.RemoveCurrent();
+        }
         UBot::MuJoCo::Native::Configuration C;
         C.Gravity = UBot::MuJoCo::Conversion::Polar(FVector(0.0, 0.0, World.GetGravityZ() / 100.0));
         const AUBotMuJoCoWorldSettings* Settings = nullptr;
