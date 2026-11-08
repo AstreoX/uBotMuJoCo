@@ -45,6 +45,7 @@ private:
                  FText& OutError);
     const FInstance* FindInstance(int64 InstanceId) const;
     UBot::MuJoCo::Native::Inputs MakeInputs() const;
+    double SnapshotTime(double NativeTimeSeconds) const;
     TArray<FInstance> Instances;
     TMap<int32, FHandle> Handles;
     TMap<int64, FUBotPhysicsSceneBody> ForeignBodies;
@@ -56,4 +57,5 @@ private:
     bool bNeedsRebuild = false;
     double EpochSimSeconds = 0.0;
     double EpochNativeSeconds = 0.0;
+    int64 SuccessfulSteps = 0;
 };

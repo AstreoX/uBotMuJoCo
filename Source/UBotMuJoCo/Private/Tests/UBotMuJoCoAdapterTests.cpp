@@ -200,4 +200,42 @@ bool FUBotMuJoCoNativeObservationsTest::RunTest(const FString& Parameters)
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUBotMuJoCoLongRunClockTest, "UBotMuJoCo.Adapter.LongRunTimeGrid",
+                                 EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUBotMuJoCoLongRunClockTest::RunTest(const FString& Parameters)
+{
+    UBot::MuJoCo::Native::Configuration Config;
+    Config.StepSeconds = 0.1;
+    Config.Gravity = {0, 0, 0};
+    FUBotMuJoCoSolver Solver(Config, false);
+    FUBotPhysicsModelInstanceDesc Desc;
+    Desc.InstanceId = 1;
+    Desc.Model = MakeQuaternionModel();
+    FUBotPhysicsModelBodyBindingDesc Display;
+    Display.BodyId = TEXT("root");
+    Desc.BodyBindings.Add(Display);
+    FUBotPhysicsModelInstanceResult Result;
+    FText Error;
+    if (!TestTrue(TEXT("Register clock regression model"), Solver.AddModel(Desc, Result, Error)))
+        return false;
+    // 100,000 additions of 0.1 produce native clock roundoff above the old fixed 1e-8
+    // continuity threshold. No forces or velocities are present, isolating time bookkeeping.
+    constexpr int32 Steps = 100000;
+    for (int32 Step = 1; Step <= Steps; ++Step)
+    {
+        if (!Solver.Step(42.0 + static_cast<double>(Step) * Config.StepSeconds, Error))
+        {
+            AddError(FString::Printf(TEXT("Clock continuity failed at step %d: %s"), Step, *Error.ToString()));
+            return false;
+        }
+    }
+    FUBotBodyState State;
+    TestTrue(TEXT("Final body endpoint available"), Solver.GetBodyState(Result.Bodies[0].Handle, State));
+    TestTrue(TEXT("Snapshot remains on the integration grid"),
+             FMath::IsNearlyEqual(State.TimestampSeconds, 10042.0, 1.e-9));
+    TestTrue(TEXT("No-motion state stays unchanged"), State.PositionMeters.Equals(FVector(1, 2, 3), 1.e-8));
+    return true;
+}
+
 #endif
