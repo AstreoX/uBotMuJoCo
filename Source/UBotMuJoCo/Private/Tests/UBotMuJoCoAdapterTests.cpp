@@ -417,7 +417,7 @@ bool FUBotMuJoCoSceneContactTest::RunTest(const FString& Parameters)
     Motion.KinematicPoses.Add(Target);
     TestTrue(TEXT("Kinematic scene pose update is accepted without topology change"),
              Solver.UpdateScene(Motion, Error));
-    TestTrue(TEXT("Next step consumes the updated mocap target"), Solver.Step((Steps + 1) * Config.StepSeconds, Error));
+    TestTrue(TEXT("Next step accepts the updated mocap input frame"), Solver.Step((Steps + 1) * Config.StepSeconds, Error));
     return true;
 }
 
