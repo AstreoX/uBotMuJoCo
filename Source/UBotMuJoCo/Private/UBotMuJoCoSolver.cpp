@@ -153,6 +153,12 @@ bool FUBotMuJoCoSolver::Compile(const TArray<FInstance>& Models, const TMap<int6
 bool FUBotMuJoCoSolver::AddModel(const FUBotPhysicsModelInstanceDesc& Desc, FUBotPhysicsModelInstanceResult& Out,
                                  FText& Error)
 {
+    if (Desc.WorldTransform.ContainsNaN() || !Desc.WorldTransform.GetRotation().IsNormalized() ||
+        !Desc.WorldTransform.GetScale3D().Equals(FVector::OneVector, 1.e-6))
+    {
+        Error = INVTEXT("Model placement must be a finite rigid transform in meters, with unit scale.");
+        return false;
+    }
     if (Desc.InstanceId <= 0 || FindInstance(Desc.InstanceId))
     {
         Error = INVTEXT("The model instance identity is invalid or already registered.");
@@ -267,10 +273,15 @@ bool FUBotMuJoCoSolver::Step(double End, FText& Error)
     {
         EpochSimSeconds = End - Config.StepSeconds;
         EpochNativeSeconds = Scene.GetTimeSeconds();
+        SuccessfulSteps = 0;
         bHasEpoch = true;
     }
-    const double Expected = EpochSimSeconds + Scene.GetTimeSeconds() - EpochNativeSeconds + Config.StepSeconds;
-    if (!FMath::IsFinite(End) || !FMath::IsNearlyEqual(End, Expected, 1.e-8))
+    // The scheduler uses a grid; MuJoCo accumulates its floating-point clock. Validate against
+    // successful integration count so ordinary roundoff cannot become a false discontinuity.
+    const double Expected = EpochSimSeconds + static_cast<double>(SuccessfulSteps + 1) * Config.StepSeconds;
+    const double TimeTolerance =
+        1.e-9 + 8.0 * std::numeric_limits<double>::epsilon() * FMath::Max(FMath::Abs(End), FMath::Abs(Expected));
+    if (!FMath::IsFinite(End) || !FMath::IsNearlyEqual(End, Expected, TimeTolerance))
     {
         Error = INVTEXT(
             "The requested step is not continuous with native time. Reset the backend to establish a new time origin.");
@@ -279,6 +290,7 @@ bool FUBotMuJoCoSolver::Step(double End, FText& Error)
     std::string NativeError;
     if (!Scene.Step(MakeInputs(), NativeError))
         return Fail(Error, NativeError);
+    ++SuccessfulSteps;
     for (auto& Pair : Handles)
         Pair.Value.bPublished = true;
     return true;
@@ -298,6 +310,7 @@ bool FUBotMuJoCoSolver::Reset(double Now, FText& Error)
         return Fail(Error, NativeError);
     EpochSimSeconds = Now;
     EpochNativeSeconds = Scene.GetTimeSeconds();
+    SuccessfulSteps = 0;
     bHasEpoch = true;
     for (auto& I : Instances)
         I.Inputs = FUBotPhysicsInputs();
@@ -320,7 +333,7 @@ bool FUBotMuJoCoSolver::GetBodyState(int32 Handle, FUBotBodyState& Out) const
     R.Orientation = T.GetRotation();
     R.LinearVelocityMetersPerSecond = C::Polar(State.LinearVelocity);
     R.AngularVelocityRadiansPerSecond = C::Axial(State.AngularVelocity);
-    R.TimestampSeconds = EpochSimSeconds + State.NativeTimeSeconds - EpochNativeSeconds;
+    R.TimestampSeconds = SnapshotTime(State.NativeTimeSeconds);
     R.Source = UBot::MuJoCo::BackendName;
     Out = R;
     return true;
@@ -346,7 +359,7 @@ bool FUBotMuJoCoSolver::GetJointState(int64 Id, const FString& JointId, FUBotPhy
         R.Position.Append(State.Position.data(), static_cast<int32>(State.Position.size()));
     if (!State.Velocity.empty())
         R.Velocity.Append(State.Velocity.data(), static_cast<int32>(State.Velocity.size()));
-    R.TimestampSeconds = EpochSimSeconds + State.NativeTimeSeconds - EpochNativeSeconds;
+    R.TimestampSeconds = SnapshotTime(State.NativeTimeSeconds);
     Out = MoveTemp(R);
     return true;
 }
@@ -376,9 +389,9 @@ bool FUBotMuJoCoSolver::ApplyInputs(int64 Id, const FUBotPhysicsInputs& Input, F
             return false;
         }
         Seen.Add(A.Id);
-        if (Found->Limited)
-            for (double V : A.Values)
-                if (V < Found->Minimum || V > Found->Maximum)
+        for (int32 K = 0; K < A.Values.Num(); ++K)
+            if (Found->InputLimited[K])
+                if (A.Values[K] < Found->InputMinimum[K] || A.Values[K] > Found->InputMaximum[K])
                 {
                     Error = INVTEXT("Actuator input is outside its authored range.");
                     return false;
@@ -465,8 +478,11 @@ bool FUBotMuJoCoSolver::GetActuators(int64 Id, TArray<FUBotMuJoCoActuatorDescrip
         auto& Value = Result.AddDefaulted_GetRef();
         Value.Name = UTF8_TO_TCHAR(A.Name.c_str());
         Value.InputCount = A.InputCount;
-        Value.bLimited = A.Limited;
-        Value.Range = FVector2D(A.Minimum, A.Maximum);
+        for (int32 K = 0; K < A.InputCount; ++K)
+        {
+            Value.InputLimited.Add(A.InputLimited[K]);
+            Value.InputRanges.Add(FVector2D(A.InputMinimum[K], A.InputMaximum[K]));
+        }
     }
     Out = MoveTemp(Result);
     return true;
@@ -482,7 +498,7 @@ bool FUBotMuJoCoSolver::GetActivation(int64 Id, const FString& Name, FUBotMuJoCo
     FUBotMuJoCoNativeValues Result;
     if (!State.Activation.empty())
         Result.Values.Append(State.Activation.data(), static_cast<int32>(State.Activation.size()));
-    Result.TimestampSeconds = EpochSimSeconds + State.NativeTimeSeconds - EpochNativeSeconds;
+    Result.TimestampSeconds = SnapshotTime(State.NativeTimeSeconds);
     Out = MoveTemp(Result);
     return true;
 }
@@ -497,7 +513,15 @@ bool FUBotMuJoCoSolver::GetSensor(int64 Id, const FString& Name, FUBotMuJoCoNati
     FUBotMuJoCoNativeValues Result;
     if (!State.Values.empty())
         Result.Values.Append(State.Values.data(), static_cast<int32>(State.Values.size()));
-    Result.TimestampSeconds = EpochSimSeconds + State.NativeTimeSeconds - EpochNativeSeconds;
+    Result.TimestampSeconds = SnapshotTime(State.NativeTimeSeconds);
     Out = MoveTemp(Result);
     return true;
+}
+
+double FUBotMuJoCoSolver::SnapshotTime(double NativeTimeSeconds) const
+{
+    // Every published endpoint follows one successful fixed step. Rounding recovers its grid
+    // index without changing the native clock or manufacturing any skipped integration.
+    const double Index = FMath::RoundToDouble((NativeTimeSeconds - EpochNativeSeconds) / Config.StepSeconds);
+    return EpochSimSeconds + Index * Config.StepSeconds;
 }

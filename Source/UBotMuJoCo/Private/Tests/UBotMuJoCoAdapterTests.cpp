@@ -200,4 +200,92 @@ bool FUBotMuJoCoNativeObservationsTest::RunTest(const FString& Parameters)
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUBotMuJoCoLongRunClockTest, "UBotMuJoCo.Adapter.LongRunTimeGrid",
+                                 EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUBotMuJoCoLongRunClockTest::RunTest(const FString& Parameters)
+{
+    UBot::MuJoCo::Native::Configuration Config;
+    Config.StepSeconds = 0.1;
+    Config.Gravity = {0, 0, 0};
+    FUBotMuJoCoSolver Solver(Config, false);
+    FUBotPhysicsModelInstanceDesc Desc;
+    Desc.InstanceId = 1;
+    Desc.Model = MakeQuaternionModel();
+    FUBotPhysicsModelBodyBindingDesc Display;
+    Display.BodyId = TEXT("root");
+    Desc.BodyBindings.Add(Display);
+    FUBotPhysicsModelInstanceResult Result;
+    FText Error;
+    if (!TestTrue(TEXT("Register clock regression model"), Solver.AddModel(Desc, Result, Error)))
+        return false;
+    // 100,000 additions of 0.1 produce native clock roundoff above the old fixed 1e-8
+    // continuity threshold. No forces or velocities are present, isolating time bookkeeping.
+    constexpr int32 Steps = 100000;
+    for (int32 Step = 1; Step <= Steps; ++Step)
+    {
+        if (!Solver.Step(42.0 + static_cast<double>(Step) * Config.StepSeconds, Error))
+        {
+            AddError(FString::Printf(TEXT("Clock continuity failed at step %d: %s"), Step, *Error.ToString()));
+            return false;
+        }
+    }
+    FUBotBodyState State;
+    TestTrue(TEXT("Final body endpoint available"), Solver.GetBodyState(Result.Bodies[0].Handle, State));
+    TestTrue(TEXT("Snapshot remains on the integration grid"),
+             FMath::IsNearlyEqual(State.TimestampSeconds, 10042.0, 1.e-9));
+    TestTrue(TEXT("No-motion state stays unchanged"), State.PositionMeters.Equals(FVector(1, 2, 3), 1.e-8));
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUBotMuJoCoModelFrameTest, "UBotMuJoCo.Adapter.ModelFrameGeometry",
+                                 EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUBotMuJoCoModelFrameTest::RunTest(const FString& Parameters)
+{
+    UBot::MuJoCo::Native::Configuration Config;
+    Config.Gravity = {0, 0, 0};
+    FUBotMuJoCoSolver Solver(Config, false);
+    FUBotPhysicsModelInstanceDesc Desc;
+    Desc.InstanceId = 1;
+    Desc.Model = MakeQuaternionModel();
+    // Common identities are arbitrary. The string "world" must not change an ordinary body's meaning.
+    Desc.Model.Bodies[0].Id = TEXT("world");
+    Desc.Model.Bodies[1].ParentId = TEXT("world");
+    Desc.Model.Joints[0].BodyId = TEXT("world");
+    FUBotPhysicsModelGeometry Floor;
+    Floor.Id = TEXT("ground");
+    Floor.Type = EUBotPhysicsGeometryType::Box;
+    Floor.Size = FVector(5.0, 5.0, 0.1);
+    Floor.LocalTransform.SetTranslation(FVector(0.0, 0.0, -5.0));
+    Desc.Model.Geometries.Add(Floor); // Empty BodyId is explicitly the model frame.
+    FUBotPhysicsModelBodyBindingDesc Display;
+    Display.BodyId = TEXT("world");
+    Desc.BodyBindings.Add(Display);
+    FUBotPhysicsModelInstanceResult Result;
+    FText Error;
+    if (!TestTrue(TEXT("Compile legal model frame geometry and arbitrary body ID"),
+                  Solver.AddModel(Desc, Result, Error)))
+    {
+        AddError(Error.ToString());
+        return false;
+    }
+    TestTrue(TEXT("Step compiled model"), Solver.Step(0.002, Error));
+    FUBotBodyState State;
+    TestTrue(TEXT("Ordinary body named world still publishes dynamic state"),
+             Solver.GetBodyState(Result.Bodies[0].Handle, State));
+    TestTrue(TEXT("Ordinary body's free coordinates are honored"),
+             State.PositionMeters.Equals(FVector(1.0, 2.0, 3.0), 1.e-8));
+    Desc.InstanceId = 2;
+    Desc.WorldTransform.SetScale3D(FVector(2.0));
+    FUBotPhysicsModelInstanceResult Rejected;
+    TestFalse(TEXT("Scaled model placement is rejected rather than silently discarded"),
+              Solver.AddModel(Desc, Rejected, Error));
+    TestTrue(TEXT("Rejected placement leaves existing state intact"),
+             Solver.GetBodyState(Result.Bodies[0].Handle, State));
+    TestTrue(TEXT("Rejected placement does not change timestamp"),
+             FMath::IsNearlyEqual(State.TimestampSeconds, 0.002, 1.e-9));
+    return true;
+}
+
 #endif

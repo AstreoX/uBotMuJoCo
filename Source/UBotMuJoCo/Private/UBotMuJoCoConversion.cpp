@@ -3,6 +3,7 @@
 #include "UBotMuJoCoImport.h"
 #include "UBotMuJoCoModelData.h"
 #include "UBotRightHandedConventions.h"
+#include <algorithm>
 
 namespace UBot::MuJoCo::Conversion
 {
@@ -113,7 +114,7 @@ bool ToNative(const FUBotPhysicsModel& M, N::Model& Out, FText& Error)
     if (!M.Validate(Error))
         return false;
     const auto* Extra = Cast<UUBotMuJoCoModelData>(M.Extension);
-    if (M.Extension && !Extra)
+    if (M.Extension && (!Extra || Extra->Backend != FName(TEXT("MuJoCo"))))
     {
         Error = INVTEXT("The model contains an extension which MuJoCo cannot compile.");
         return false;
@@ -138,7 +139,17 @@ bool ToNative(const FUBotPhysicsModel& M, N::Model& Out, FText& Error)
     {
         N::Body R;
         R.Id = UTF8(B.Id);
-        R.Name = FindName(Extra ? &Extra->BodyNames : nullptr, B.Id);
+        R.Name = Extra ? FindName(&Extra->BodyNames, B.Id)
+                       : UTF8(FString::Printf(TEXT("body_%d"), static_cast<int32>(Result.Bodies.size())));
+        if (Extra)
+        {
+            for (const auto& Name : Extra->BodyNames)
+                if (Name.Id.Equals(B.Id, ESearchCase::CaseSensitive))
+                {
+                    R.ModelFrame = Name.bModelFrame;
+                    break;
+                }
+        }
         R.ParentId = UTF8(B.ParentId);
         R.Pose = Pose(B.LocalTransform);
         R.Mass = B.MassKilograms;
@@ -185,12 +196,28 @@ bool ToNative(const FUBotPhysicsModel& M, N::Model& Out, FText& Error)
         ConvertCoordinates(R.InitialPosition, R.InitialVelocity, J.Type, true);
         Result.Joints.push_back(std::move(R));
     }
+    std::string FrameId;
+    for (const auto& B : Result.Bodies)
+        if (B.ModelFrame)
+            FrameId = B.Id;
+    if (M.Geometries.ContainsByPredicate([](const auto& G) { return G.BodyId.IsEmpty(); }) && FrameId.empty())
+    {
+        FrameId = "__ubot_model_frame";
+        while (std::any_of(Result.Bodies.begin(), Result.Bodies.end(),
+                           [&FrameId](const auto& B) { return B.Id == FrameId; }))
+            FrameId += "_";
+        N::Body Frame;
+        Frame.Id = FrameId;
+        Frame.Name = "world";
+        Frame.ModelFrame = true;
+        Result.Bodies.push_back(std::move(Frame));
+    }
     for (const auto& G : M.Geometries)
     {
         N::Geometry R;
         R.Id = UTF8(G.Id);
         R.Name = FindName(Extra ? &Extra->GeometryNames : nullptr, G.Id);
-        R.BodyId = UTF8(G.BodyId);
+        R.BodyId = G.BodyId.IsEmpty() ? FrameId : UTF8(G.BodyId);
         R.Pose = Pose(G.LocalTransform);
         R.Size = Raw(G.Size);
         R.AssetName = UTF8(G.Resource);
@@ -304,6 +331,7 @@ bool FromNative(const N::ImportResult& Import, UObject* Outer, UUBotMuJoCoSolver
         auto& Name = Extra->BodyNames.AddDefaulted_GetRef();
         Name.Id = R.Id;
         Name.Name = String(B.Name);
+        Name.bModelFrame = B.ModelFrame;
     }
     for (const auto& J : M.Joints)
     {
