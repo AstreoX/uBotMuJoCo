@@ -2,8 +2,8 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
-#include "UBotMuJoCoModelData.generated.h"
 #include "UBotPhysicsModel.h"
+#include "UBotMuJoCoModelData.generated.h"
 
 /** One self-contained native mesh, texture or heightfield resource, addressed by virtual filename. */
 USTRUCT(BlueprintType)
