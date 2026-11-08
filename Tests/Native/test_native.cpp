@@ -63,6 +63,16 @@ void Reference(const std::filesystem::path &Path, const std::string &Motor, bool
     mjModel *M = mj_loadXML(Path.string().c_str(), nullptr, E, sizeof(E));
     Check(M != nullptr, E);
     mjData *D = mj_makeData(M);
+    const auto CheckJointDimensions = [M](int JointId, const JointState &State)
+    {
+        Check(JointId >= 0 && JointId < M->njnt, "joint is absent from the independent native model");
+        const mjtSize PositionEnd = JointId + 1 < M->njnt ? M->jnt_qposadr[JointId + 1] : M->nq;
+        const mjtSize VelocityEnd = JointId + 1 < M->njnt ? M->jnt_dofadr[JointId + 1] : M->nv;
+        Check(State.Position.size() == static_cast<std::size_t>(PositionEnd - M->jnt_qposadr[JointId]),
+              "published qpos dimension differs from the independent native layout");
+        Check(State.Velocity.size() == static_cast<std::size_t>(VelocityEnd - M->jnt_dofadr[JointId]),
+              "published qvel dimension differs from the independent native layout");
+    };
     if (OffsetBall)
     {
         const int Ball = mj_name2id(M, mjOBJ_JOINT, "ball_joint"), Free = mj_name2id(M, mjOBJ_JOINT, "root");
@@ -97,6 +107,7 @@ void Reference(const std::filesystem::path &Path, const std::string &Motor, bool
             JointState V;
             Check(S.GetJointState(1, J.Id, V), "Missing joint output");
             int N = mj_name2id(M, mjOBJ_JOINT, J.Name.c_str());
+            CheckJointDimensions(N, V);
             for (std::size_t K = 0; K < V.Position.size(); ++K)
             {
                 Check(std::abs(V.Position[K] - D->qpos[M->jnt_qposadr[N] + K]) < 1e-8,
@@ -133,6 +144,7 @@ void Reference(const std::filesystem::path &Path, const std::string &Motor, bool
             JointState V;
             Check(S.GetJointState(1, J.Id, V), "missing joint after migration");
             int N = mj_name2id(M, mjOBJ_JOINT, J.Name.c_str());
+            CheckJointDimensions(N, V);
             for (std::size_t K = 0; K < V.Position.size(); ++K)
             {
                 Check(std::abs(V.Position[K] - D->qpos[M->jnt_qposadr[N] + K]) < 1e-8,
