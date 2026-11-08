@@ -1,0 +1,1 @@
+<mujoco><compiler angle="radian"/><option gravity="0 0 0"/><worldbody><body name="offset" pos="0 0 1"><freejoint name="free_joint"/><inertial pos="0.2 0.1 0" mass="2" diaginertia="0.1 0.2 0.25"/><geom name="visual" type="sphere" size="0.1"/></body></worldbody><keyframe><key name="placed" time="0.5" qpos="1 2 3 1 0 0 0" qvel="1 2 3 0.3 0.4 0.5"/></keyframe></mujoco>

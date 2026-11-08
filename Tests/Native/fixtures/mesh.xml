@@ -1,0 +1,1 @@
+<mujoco><compiler angle="radian"/><asset><mesh name="tetra" vertex="1 0 0  2 0 0  1 0.7 0  1 0 0.6" face="0 2 1  0 1 3  0 3 2  1 2 3"/></asset><worldbody><body name="mesh_body" pos="0 0 2"><freejoint name="mesh_free"/><geom name="mesh_geom" type="mesh" mesh="tetra" pos="0.2 0.3 0.4" quat="0.9238795325 0 0 0.3826834324"/></body></worldbody></mujoco>
