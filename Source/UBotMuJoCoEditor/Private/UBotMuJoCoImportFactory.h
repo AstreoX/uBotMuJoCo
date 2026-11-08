@@ -23,7 +23,4 @@ public:
     {
         return ImportPriority;
     }
-
-private:
-    TMap<TWeakObjectPtr<UObject>, FString> SessionSourcePaths;
 };
