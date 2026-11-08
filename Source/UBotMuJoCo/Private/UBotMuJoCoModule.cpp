@@ -8,6 +8,8 @@
 #include "UBotMuJoCoSolver.h"
 #include "UBotMuJoCoWorldSettings.h"
 #include "UBotPhysics.h"
+#include "UBotPhysicsSubsystem.h"
+#include "UBotMuJoCoFactoryAccess.h"
 
 DEFINE_LOG_CATEGORY(LogUBotMuJoCo);
 
@@ -15,7 +17,8 @@ namespace
 {
 class FUBotMuJoCoFactory final : public IUBotPhysicsBackendFactory
 {
-  public:
+public:
+    TMap<TWeakObjectPtr<UWorld>, TWeakPtr<FUBotMuJoCoSolver>> Solvers;
     virtual FName GetExtensionName() const override
     {
         return UBot::MuJoCo::BackendName;
@@ -31,11 +34,11 @@ class FUBotMuJoCoFactory final : public IUBotPhysicsBackendFactory
         // Acceleration, differentiability and cross-platform determinism are not promised.
         return C;
     }
-    virtual TSharedPtr<IUBotPhysicsSolver> CreateSolver(UWorld &World) override
+    virtual TSharedPtr<IUBotPhysicsSolver> CreateSolver(UWorld& World) override
     {
         UBot::MuJoCo::Native::Configuration C;
         C.Gravity = UBot::MuJoCo::Conversion::Polar(FVector(0.0, 0.0, World.GetGravityZ() / 100.0));
-        const AUBotMuJoCoWorldSettings *Settings = nullptr;
+        const AUBotMuJoCoWorldSettings* Settings = nullptr;
         for (TActorIterator<AUBotMuJoCoWorldSettings> It(&World); It; ++It)
         {
             if (Settings)
@@ -61,20 +64,35 @@ class FUBotMuJoCoFactory final : public IUBotPhysicsBackendFactory
             return nullptr;
         }
         C.AllowWorldOptionsOverride = Settings && Settings->bAllowWorldOptionsOverride;
-        return MakeShared<FUBotMuJoCoSolver>(C, Settings && Settings->bAllowSceneMeshConvexApproximation);
+        auto Solver = MakeShared<FUBotMuJoCoSolver>(C, Settings && Settings->bAllowSceneMeshConvexApproximation);
+        Solvers.Add(&World, Solver);
+        return Solver;
     }
 };
+TSharedPtr<FUBotMuJoCoFactory> Factory;
 } // namespace
+
+TSharedPtr<FUBotMuJoCoSolver> UBot::MuJoCo::Private::FindSolver(UWorld* World)
+{
+    if (!IsInGameThread() || !IsValid(World) || !Factory)
+        return nullptr;
+    const auto* WeakSolver = Factory->Solvers.Find(World);
+    auto Solver = WeakSolver ? WeakSolver->Pin() : nullptr;
+    const auto* Physics = World->GetSubsystem<UUBotPhysicsSubsystem>();
+    return Solver && Physics && Physics->FindSolver(UBot::MuJoCo::BackendName) == Solver.Get() ? Solver : nullptr;
+}
 
 void FUBotMuJoCoModule::StartupModule()
 {
+    Factory = MakeShared<FUBotMuJoCoFactory>();
     FUBotExtensionRegistry::Get().RegisterExtension(UBot::Physics::BackendExtensionPoint, UBot::MuJoCo::PackageName,
-                                                    MakeShared<FUBotMuJoCoFactory>());
+                                                    Factory.ToSharedRef());
 }
 
 void FUBotMuJoCoModule::ShutdownModule()
 {
     FUBotExtensionRegistry::Get().UnregisterAllFromPackage(UBot::MuJoCo::PackageName);
+    Factory.Reset();
 }
 
 IMPLEMENT_MODULE(FUBotMuJoCoModule, UBotMuJoCo)

@@ -4,6 +4,10 @@
 #include "UBotMuJoCoConversion.h"
 #include "UBotMuJoCoModelData.h"
 #include "UBotMuJoCoSolver.h"
+#include "UBotMuJoCoImport.h"
+#include "Interfaces/IPluginManager.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
 
 namespace
 {
@@ -40,14 +44,14 @@ FUBotPhysicsModel MakeQuaternionModel()
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUBotMuJoCoCoordinateLayoutTest, "UBotMuJoCo.Adapter.QuaternionLayouts",
                                  EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FUBotMuJoCoCoordinateLayoutTest::RunTest(const FString &Parameters)
+bool FUBotMuJoCoCoordinateLayoutTest::RunTest(const FString& Parameters)
 {
     const auto M = MakeQuaternionModel();
     UBot::MuJoCo::Native::Model Native;
     FText Error;
     if (!TestTrue(TEXT("Common model converts"), UBot::MuJoCo::Conversion::ToNative(M, Native, Error)))
         return false;
-    const auto &Q = Native.Joints[0].InitialPosition;
+    const auto& Q = Native.Joints[0].InitialPosition;
     TestEqual(TEXT("Free translation mirrors Y"), Q[1], -2.0);
     TestEqual(TEXT("Free quaternion starts with W"), Q[3], FMath::Sqrt(0.71));
     TestEqual(TEXT("Axial quaternion X mirrors"), Q[4], -0.2);
@@ -55,7 +59,7 @@ bool FUBotMuJoCoCoordinateLayoutTest::RunTest(const FString &Parameters)
     TestEqual(TEXT("Axial quaternion Z mirrors"), Q[6], 0.4);
     TestEqual(TEXT("Ball quaternion starts with W"), Native.Joints[1].InitialPosition[0], FMath::Sqrt(0.70));
     TestEqual(TEXT("Ball quaternion X mirrors"), Native.Joints[1].InitialPosition[1], 0.1);
-    auto *Preset = NewObject<UUBotMuJoCoSolverPreset>();
+    auto* Preset = NewObject<UUBotMuJoCoSolverPreset>();
     UBot::MuJoCo::Native::ImportResult Imported;
     Imported.Value = Native;
     FUBotPhysicsModel RoundTrip;
@@ -74,7 +78,7 @@ bool FUBotMuJoCoCoordinateLayoutTest::RunTest(const FString &Parameters)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUBotMuJoCoNativeEndpointTest, "UBotMuJoCo.Adapter.NativeEndpointAndReset",
                                  EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FUBotMuJoCoNativeEndpointTest::RunTest(const FString &Parameters)
+bool FUBotMuJoCoNativeEndpointTest::RunTest(const FString& Parameters)
 {
     UBot::MuJoCo::Native::Configuration Config;
     Config.Gravity = {0, 0, 0};
@@ -120,6 +124,79 @@ bool FUBotMuJoCoNativeEndpointTest::RunTest(const FString &Parameters)
     TestTrue(TEXT("Step follows new origin"), Solver.Step(20.002, Error));
     TestTrue(TEXT("Remove whole model"), Solver.RemoveModel(1, Error));
     TestFalse(TEXT("Old handle stays invalid"), Solver.GetBodyState(Result.Bodies[0].Handle, Body));
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUBotMuJoCoNativeObservationsTest, "UBotMuJoCo.Adapter.NativeObservations",
+                                 EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUBotMuJoCoNativeObservationsTest::RunTest(const FString& Parameters)
+{
+    const auto Plugin = IPluginManager::Get().FindPlugin(TEXT("UBotMuJoCo"));
+    if (!TestTrue(TEXT("Plugin available"), Plugin.IsValid()))
+        return false;
+    FUBotMuJoCoResource Resource;
+    Resource.Name = TEXT("coupled.xml");
+    if (!TestTrue(
+            TEXT("Fixture available"),
+            FFileHelper::LoadFileToArray(
+                Resource.Bytes, *FPaths::Combine(Plugin->GetBaseDir(), TEXT("Tests/Native/fixtures/coupled.xml")))))
+        return false;
+    auto* Preset = NewObject<UUBotMuJoCoSolverPreset>();
+    FUBotPhysicsModel Model;
+    FText Error;
+    if (!TestTrue(TEXT("Import full native features"),
+                  UBot::MuJoCo::ImportModel(Resource.Name, {Resource}, GetTransientPackage(), Preset, Model, Error)))
+    {
+        AddError(Error.ToString());
+        return false;
+    }
+    UBot::MuJoCo::Native::Configuration Config;
+    Config.StepSeconds = Preset->StepSeconds;
+    Config.Gravity = UBot::MuJoCo::Conversion::Polar(Preset->GravityMetersPerSecondSquared);
+    Config.Options = TCHAR_TO_UTF8(*Preset->NativeOptions);
+    FUBotMuJoCoSolver Solver(Config, false);
+    FUBotPhysicsModelInstanceDesc Desc;
+    Desc.InstanceId = 1;
+    Desc.Model = Model;
+    FUBotPhysicsModelInstanceResult Result;
+    if (!TestTrue(TEXT("Compile native extension"), Solver.AddModel(Desc, Result, Error)))
+    {
+        AddError(Error.ToString());
+        return false;
+    }
+    TArray<FUBotMuJoCoActuatorDescription> Descriptions;
+    TestTrue(TEXT("Describe authored actuator"), Solver.GetActuators(1, Descriptions));
+    TestEqual(TEXT("One native actuator"), Descriptions.Num(), 1);
+    if (Descriptions.Num() != 1)
+        return false;
+    TestEqual(TEXT("Authored identity"), Descriptions[0].Name, FString(TEXT("filtered")));
+    TestEqual(TEXT("Authored input width"), Descriptions[0].InputCount, 1);
+    FUBotMuJoCoNativeValues Activation, Sensor;
+    TestFalse(TEXT("Activation is not published before integration"),
+              Solver.GetActivation(1, TEXT("filtered"), Activation));
+    TestFalse(TEXT("Sensor is not published before integration"), Solver.GetSensor(1, TEXT("angle"), Sensor));
+    FUBotPhysicsInputs Input;
+    Input.Actuators.Add({TEXT("filtered"), {0.2}});
+    TestTrue(TEXT("Native actuator input accepted"), Solver.ApplyInputs(1, Input, Error));
+    for (int32 Step = 1; Step <= 10; ++Step)
+        if (!TestTrue(TEXT("Integrate native actuator"), Solver.Step(17.0 + Step * Config.StepSeconds, Error)))
+            return false;
+    TestTrue(TEXT("Activation endpoint available"), Solver.GetActivation(1, TEXT("filtered"), Activation));
+    TestTrue(TEXT("Sensor endpoint available"), Solver.GetSensor(1, TEXT("angle"), Sensor));
+    TestEqual(TEXT("Activation state width"), Activation.Values.Num(), 1);
+    TestEqual(TEXT("Sensor state width"), Sensor.Values.Num(), 1);
+    if (Activation.Values.Num() == 1)
+        TestTrue(TEXT("Filtered activation evolves within authored input"),
+                 Activation.Values[0] > 0.0 && Activation.Values[0] < 0.2);
+    TestTrue(TEXT("Activation timestamp uses uBot endpoint"),
+             FMath::IsNearlyEqual(Activation.TimestampSeconds, 17.02, 1.e-9));
+    TestTrue(TEXT("Sensor shares the same endpoint"),
+             FMath::IsNearlyEqual(Sensor.TimestampSeconds, Activation.TimestampSeconds, 1.e-9));
+    TestFalse(TEXT("Native names are case-sensitive"), Solver.GetSensor(1, TEXT("ANGLE"), Sensor));
+    TestTrue(TEXT("Reset native state"), Solver.Reset(20.0, Error));
+    TestFalse(TEXT("Reset clears activation snapshot"), Solver.GetActivation(1, TEXT("filtered"), Activation));
+    TestFalse(TEXT("Reset clears sensor snapshot"), Solver.GetSensor(1, TEXT("angle"), Sensor));
     return true;
 }
 

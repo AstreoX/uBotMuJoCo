@@ -45,7 +45,7 @@ UCLASS(BlueprintType)
 class UBOTMUJOCO_API UUBotMuJoCoSolverPreset : public UDataAsset
 {
     GENERATED_BODY()
-  public:
+public:
     /** Fixed integration interval, seconds; changing it requires a new solver. */
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "MuJoCo", meta = (ClampMin = "0.0001", ClampMax = "100"))
     double StepSeconds = 0.002;
@@ -62,7 +62,7 @@ UCLASS(BlueprintType, EditInlineNew, DefaultToInstanced)
 class UBOTMUJOCO_API UUBotMuJoCoModelData : public UUBotPhysicsModelExtension
 {
     GENERATED_BODY()
-  public:
+public:
     UUBotMuJoCoModelData();
     /** Native-only elements and attributes. This is not a complete MJCF model or an override template. */
     UPROPERTY()

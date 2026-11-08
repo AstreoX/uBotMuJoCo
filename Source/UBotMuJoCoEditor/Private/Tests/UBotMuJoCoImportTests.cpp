@@ -10,24 +10,24 @@
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUBotMuJoCoEditorImportTest, "UBotMuJoCo.Editor.ImportAndReimport",
                                  EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FUBotMuJoCoEditorImportTest::RunTest(const FString &Parameters)
+bool FUBotMuJoCoEditorImportTest::RunTest(const FString& Parameters)
 {
     const auto Plugin = IPluginManager::Get().FindPlugin(TEXT("UBotMuJoCo"));
     if (!TestTrue(TEXT("Plugin located"), Plugin.IsValid()))
         return false;
     const FString Filename = FPaths::Combine(Plugin->GetBaseDir(), TEXT("Tests/Native/fixtures/pendulum.xml"));
-    auto *Factory = NewObject<UUBotMuJoCoImportFactory>();
+    auto* Factory = NewObject<UUBotMuJoCoImportFactory>();
     if (!TestTrue(TEXT("Recognizes MJCF document"), Factory->FactoryCanImport(Filename)))
         return false;
     const FString PackageName = TEXT("/Temp/UBotMuJoCoImport_") + FGuid::NewGuid().ToString(EGuidFormats::Digits);
-    UPackage *Package = CreatePackage(*PackageName);
+    UPackage* Package = CreatePackage(*PackageName);
     bool bCanceled = false;
-    auto *Asset = Cast<UUBotPhysicsModelAsset>(
+    auto* Asset = Cast<UUBotPhysicsModelAsset>(
         Factory->FactoryCreateFile(UUBotPhysicsModelAsset::StaticClass(), Package, TEXT("Imported"),
                                    RF_Public | RF_Standalone, Filename, nullptr, GWarn, bCanceled));
     if (!TestNotNull(TEXT("Creates a common Physics model"), Asset))
         return false;
-    auto *Data = Cast<UUBotMuJoCoModelData>(Asset->Model.Extension);
+    auto* Data = Cast<UUBotMuJoCoModelData>(Asset->Model.Extension);
     if (!TestNotNull(TEXT("Native extension exists"), Data))
         return false;
     TestNotNull(TEXT("Global options preset generated"), Data->SuggestedPreset.Get());

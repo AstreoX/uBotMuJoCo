@@ -11,7 +11,7 @@ UCLASS(BlueprintType, hidecategories = (Actor, Collision, Input, Replication, Re
 class UBOTMUJOCO_API AUBotMuJoCoWorldSettings : public AInfo
 {
     GENERATED_BODY()
-  public:
+public:
     /** Global native configuration. Without a preset, use 0.002 seconds and this World's gravity. */
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "MuJoCo")
     TObjectPtr<UUBotMuJoCoSolverPreset> SolverPreset;

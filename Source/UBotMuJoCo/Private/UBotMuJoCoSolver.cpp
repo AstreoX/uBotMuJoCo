@@ -13,23 +13,23 @@ namespace C = UBot::MuJoCo::Conversion;
 namespace
 {
 constexpr std::uint64_t ForeignInstance = std::numeric_limits<std::uint64_t>::max();
-std::string UTF8(const FString &S)
+std::string UTF8(const FString& S)
 {
     return std::string(TCHAR_TO_UTF8(*S));
 }
-bool Fail(FText &Error, const std::string &Message)
+bool Fail(FText& Error, const std::string& Message)
 {
     Error = FText::FromString(UTF8_TO_TCHAR(Message.c_str()));
     return false;
 }
-bool Finite(const TArray<double> &Values)
+bool Finite(const TArray<double>& Values)
 {
     for (double V : Values)
         if (!FMath::IsFinite(V))
             return false;
     return true;
 }
-void MirrorJoint(std::vector<double> &Q, std::vector<double> &V, EUBotPhysicsJointType Type)
+void MirrorJoint(std::vector<double>& Q, std::vector<double>& V, EUBotPhysicsJointType Type)
 {
     const size_t Offset = Type == EUBotPhysicsJointType::Free ? 3 : 0;
     if (Type == EUBotPhysicsJointType::Ball || Type == EUBotPhysicsJointType::Free)
@@ -58,7 +58,7 @@ void MirrorJoint(std::vector<double> &Q, std::vector<double> &V, EUBotPhysicsJoi
 }
 } // namespace
 
-FUBotMuJoCoSolver::FUBotMuJoCoSolver(const N::Configuration &Configuration, bool bApproximate)
+FUBotMuJoCoSolver::FUBotMuJoCoSolver(const N::Configuration& Configuration, bool bApproximate)
     : Config(Configuration), bAllowSceneMeshApproximation(bApproximate)
 {
 }
@@ -68,17 +68,17 @@ double FUBotMuJoCoSolver::GetStepSeconds() const
     return Config.StepSeconds;
 }
 
-const FUBotMuJoCoSolver::FInstance *FUBotMuJoCoSolver::FindInstance(int64 Id) const
+const FUBotMuJoCoSolver::FInstance* FUBotMuJoCoSolver::FindInstance(int64 Id) const
 {
     return Instances.FindByPredicate(
-        [Id](const FInstance &I) { return I.Native.Id == static_cast<std::uint64_t>(Id); });
+        [Id](const FInstance& I) { return I.Native.Id == static_cast<std::uint64_t>(Id); });
 }
 
-bool FUBotMuJoCoSolver::Compile(const TArray<FInstance> &Models, const TMap<int64, FUBotPhysicsSceneBody> &Foreign,
-                                bool bPreserve, FText &Error)
+bool FUBotMuJoCoSolver::Compile(const TArray<FInstance>& Models, const TMap<int64, FUBotPhysicsSceneBody>& Foreign,
+                                bool bPreserve, FText& Error)
 {
     std::vector<N::Instance> Values;
-    for (const FInstance &I : Models)
+    for (const FInstance& I : Models)
         Values.push_back(I.Native);
     if (!Foreign.IsEmpty())
     {
@@ -92,7 +92,7 @@ bool FUBotMuJoCoSolver::Compile(const TArray<FInstance> &Models, const TMap<int6
         Ids.Sort();
         for (int64 Id : Ids)
         {
-            const auto &Body = Foreign[Id];
+            const auto& Body = Foreign[Id];
             N::Body B;
             B.Id = UTF8(FString::Printf(TEXT("scene_%lld"), Id));
             B.Name = B.Id;
@@ -101,7 +101,7 @@ bool FUBotMuJoCoSolver::Compile(const TArray<FInstance> &Models, const TMap<int6
             I.Value.Bodies.push_back(B);
             for (int32 ShapeIndex = 0; ShapeIndex < Body.Shapes.Num(); ++ShapeIndex)
             {
-                const auto &Shape = Body.Shapes[ShapeIndex];
+                const auto& Shape = Body.Shapes[ShapeIndex];
                 if (Shape.Type == EUBotPhysicsShapeType::TriangleMesh && !bAllowSceneMeshApproximation)
                 {
                     Error = INVTEXT("MuJoCo cannot preserve triangle-mesh collision. Author simple/convex collision or "
@@ -130,7 +130,7 @@ bool FUBotMuJoCoSolver::Compile(const TArray<FInstance> &Models, const TMap<int6
                     G.Type = N::GeometryType::Mesh;
                     break;
                 }
-                for (const FVector &V : Shape.Vertices)
+                for (const FVector& V : Shape.Vertices)
                     G.Vertices.push_back(C::Polar(V));
                 for (int32 K = 0; K + 2 < Shape.Indices.Num(); K += 3)
                 {
@@ -150,8 +150,8 @@ bool FUBotMuJoCoSolver::Compile(const TArray<FInstance> &Models, const TMap<int6
     return true;
 }
 
-bool FUBotMuJoCoSolver::AddModel(const FUBotPhysicsModelInstanceDesc &Desc, FUBotPhysicsModelInstanceResult &Out,
-                                 FText &Error)
+bool FUBotMuJoCoSolver::AddModel(const FUBotPhysicsModelInstanceDesc& Desc, FUBotPhysicsModelInstanceResult& Out,
+                                 FText& Error)
 {
     if (Desc.InstanceId <= 0 || FindInstance(Desc.InstanceId))
     {
@@ -170,10 +170,10 @@ bool FUBotMuJoCoSolver::AddModel(const FUBotPhysicsModelInstanceDesc &Desc, FUBo
         Candidate.Native.Value.SuggestedOptions = Config.Options;
     }
     Candidate.Joints = Desc.Model.Joints;
-    for (const auto &Binding : Desc.BodyBindings)
+    for (const auto& Binding : Desc.BodyBindings)
     {
         if (!Desc.Model.Bodies.ContainsByPredicate(
-                [&Binding](const auto &B) { return B.Id.Equals(Binding.BodyId, ESearchCase::CaseSensitive); }))
+                [&Binding](const auto& B) { return B.Id.Equals(Binding.BodyId, ESearchCase::CaseSensitive); }))
         {
             Error = INVTEXT("The binding references an unknown model body.");
             return false;
@@ -185,7 +185,7 @@ bool FUBotMuJoCoSolver::AddModel(const FUBotPhysicsModelInstanceDesc &Desc, FUBo
         return false;
     Instances = MoveTemp(Next);
     FUBotPhysicsModelInstanceResult Result;
-    for (const auto &Binding : Desc.BodyBindings)
+    for (const auto& Binding : Desc.BodyBindings)
     {
         const int32 Handle = NextHandle++;
         Handles.Add(Handle, FHandle{Desc.InstanceId, Binding.BodyId, false});
@@ -195,12 +195,12 @@ bool FUBotMuJoCoSolver::AddModel(const FUBotPhysicsModelInstanceDesc &Desc, FUBo
     return true;
 }
 
-bool FUBotMuJoCoSolver::RemoveModel(int64 Id, FText &Error)
+bool FUBotMuJoCoSolver::RemoveModel(int64 Id, FText& Error)
 {
     if (!FindInstance(Id))
         return true;
     TArray<FInstance> Next = Instances;
-    Next.RemoveAll([Id](const auto &I) { return I.Native.Id == static_cast<std::uint64_t>(Id); });
+    Next.RemoveAll([Id](const auto& I) { return I.Native.Id == static_cast<std::uint64_t>(Id); });
     const bool bSuccess = Compile(Next, ForeignBodies, true, Error);
     // Ownership must end even if a native rebuild failed. Physics suspends this solver on failure.
     Instances = MoveTemp(Next);
@@ -216,9 +216,9 @@ bool FUBotMuJoCoSolver::RemoveModel(int64 Id, FText &Error)
 N::Inputs FUBotMuJoCoSolver::MakeInputs() const
 {
     N::Inputs Result;
-    for (const auto &I : Instances)
+    for (const auto& I : Instances)
     {
-        for (const auto &A : I.Inputs.Actuators)
+        for (const auto& A : I.Inputs.Actuators)
         {
             N::ActuatorInput R;
             R.InstanceId = I.Native.Id;
@@ -227,27 +227,27 @@ N::Inputs FUBotMuJoCoSolver::MakeInputs() const
                 R.Values.assign(A.Values.GetData(), A.Values.GetData() + A.Values.Num());
             Result.Actuators.push_back(std::move(R));
         }
-        for (const auto &F : I.Inputs.GeneralizedForces)
+        for (const auto& F : I.Inputs.GeneralizedForces)
         {
             N::JointForce R;
             R.InstanceId = I.Native.Id;
             R.JointId = UTF8(F.JointId);
             if (!F.Values.IsEmpty())
                 R.Values.assign(F.Values.GetData(), F.Values.GetData() + F.Values.Num());
-            const auto *J = I.Joints.FindByPredicate(
-                [&F](const auto &V) { return V.Id.Equals(F.JointId, ESearchCase::CaseSensitive); });
+            const auto* J = I.Joints.FindByPredicate(
+                [&F](const auto& V) { return V.Id.Equals(F.JointId, ESearchCase::CaseSensitive); });
             std::vector<double> Empty;
             if (J)
                 MirrorJoint(Empty, R.Values, J->Type);
             Result.JointForces.push_back(std::move(R));
         }
-        for (const auto &W : I.Inputs.BodyWrenches)
+        for (const auto& W : I.Inputs.BodyWrenches)
             Result.Wrenches.push_back(
                 {I.Native.Id, UTF8(W.BodyId), C::Polar(W.ForceNewtons), C::Axial(W.TorqueNewtonMeters)});
-        for (const auto &K : I.Inputs.KinematicTargets)
+        for (const auto& K : I.Inputs.KinematicTargets)
             Result.Kinematics.push_back({I.Native.Id, UTF8(K.BodyId), C::Pose(K.WorldTransform)});
     }
-    for (const auto &Entry : ForeignBodies)
+    for (const auto& Entry : ForeignBodies)
     {
         if (Entry.Value.Kind == EUBotPhysicsSceneBodyKind::Kinematic)
             Result.Kinematics.push_back({ForeignInstance, UTF8(FString::Printf(TEXT("scene_%lld"), Entry.Key)),
@@ -256,7 +256,7 @@ N::Inputs FUBotMuJoCoSolver::MakeInputs() const
     return Result;
 }
 
-bool FUBotMuJoCoSolver::Step(double End, FText &Error)
+bool FUBotMuJoCoSolver::Step(double End, FText& Error)
 {
     if (bNeedsRebuild)
     {
@@ -279,12 +279,12 @@ bool FUBotMuJoCoSolver::Step(double End, FText &Error)
     std::string NativeError;
     if (!Scene.Step(MakeInputs(), NativeError))
         return Fail(Error, NativeError);
-    for (auto &Pair : Handles)
+    for (auto& Pair : Handles)
         Pair.Value.bPublished = true;
     return true;
 }
 
-bool FUBotMuJoCoSolver::Reset(double Now, FText &Error)
+bool FUBotMuJoCoSolver::Reset(double Now, FText& Error)
 {
     if (!FMath::IsFinite(Now))
     {
@@ -299,16 +299,16 @@ bool FUBotMuJoCoSolver::Reset(double Now, FText &Error)
     EpochSimSeconds = Now;
     EpochNativeSeconds = Scene.GetTimeSeconds();
     bHasEpoch = true;
-    for (auto &I : Instances)
+    for (auto& I : Instances)
         I.Inputs = FUBotPhysicsInputs();
-    for (auto &Pair : Handles)
+    for (auto& Pair : Handles)
         Pair.Value.bPublished = false;
     return true;
 }
 
-bool FUBotMuJoCoSolver::GetBodyState(int32 Handle, FUBotBodyState &Out) const
+bool FUBotMuJoCoSolver::GetBodyState(int32 Handle, FUBotBodyState& Out) const
 {
-    const auto *H = Handles.Find(Handle);
+    const auto* H = Handles.Find(Handle);
     if (!H || !H->bPublished || !bHasEpoch)
         return false;
     N::BodyState State;
@@ -326,15 +326,15 @@ bool FUBotMuJoCoSolver::GetBodyState(int32 Handle, FUBotBodyState &Out) const
     return true;
 }
 
-bool FUBotMuJoCoSolver::GetJointState(int64 Id, const FString &JointId, FUBotPhysicsJointState &Out) const
+bool FUBotMuJoCoSolver::GetJointState(int64 Id, const FString& JointId, FUBotPhysicsJointState& Out) const
 {
     if (!bHasEpoch)
         return false;
-    const auto *I = FindInstance(Id);
+    const auto* I = FindInstance(Id);
     if (!I)
         return false;
-    const auto *J = I->Joints.FindByPredicate(
-        [&JointId](const auto &V) { return V.Id.Equals(JointId, ESearchCase::CaseSensitive); });
+    const auto* J = I->Joints.FindByPredicate(
+        [&JointId](const auto& V) { return V.Id.Equals(JointId, ESearchCase::CaseSensitive); });
     if (!J)
         return false;
     N::JointState State;
@@ -351,22 +351,26 @@ bool FUBotMuJoCoSolver::GetJointState(int64 Id, const FString &JointId, FUBotPhy
     return true;
 }
 
-bool FUBotMuJoCoSolver::ApplyInputs(int64 Id, const FUBotPhysicsInputs &Input, FText &Error)
+bool FUBotMuJoCoSolver::ApplyInputs(int64 Id, const FUBotPhysicsInputs& Input, FText& Error)
 {
-    auto *I = Instances.FindByPredicate([Id](const auto &V) { return V.Native.Id == static_cast<std::uint64_t>(Id); });
+    auto* I = Instances.FindByPredicate([Id](const auto& V) { return V.Native.Id == static_cast<std::uint64_t>(Id); });
     if (!I)
     {
         Error = INVTEXT("Unknown model instance.");
         return false;
     }
     const auto Actuators = Scene.GetActuators(Id);
-    TSet<FString> Seen;
-    for (const auto &A : Input.Actuators)
+    TArray<FString> Seen;
+    const auto HasSeen = [&Seen](const FString& Id) {
+        return Seen.ContainsByPredicate(
+            [&Id](const FString& Existing) { return Existing.Equals(Id, ESearchCase::CaseSensitive); });
+    };
+    for (const auto& A : Input.Actuators)
     {
         const auto Name = UTF8(A.Id);
         const auto Found =
-            std::find_if(Actuators.begin(), Actuators.end(), [&Name](const auto &V) { return V.Name == Name; });
-        if (Found == Actuators.end() || A.Values.Num() != Found->InputCount || !Finite(A.Values) || Seen.Contains(A.Id))
+            std::find_if(Actuators.begin(), Actuators.end(), [&Name](const auto& V) { return V.Name == Name; });
+        if (Found == Actuators.end() || A.Values.Num() != Found->InputCount || !Finite(A.Values) || HasSeen(A.Id))
         {
             Error = INVTEXT("Actuator input identity, dimension or values are invalid.");
             return false;
@@ -381,16 +385,16 @@ bool FUBotMuJoCoSolver::ApplyInputs(int64 Id, const FUBotPhysicsInputs &Input, F
                 }
     }
     Seen.Reset();
-    for (const auto &F : Input.GeneralizedForces)
+    for (const auto& F : Input.GeneralizedForces)
     {
-        const auto *J = I->Joints.FindByPredicate(
-            [&F](const auto &V) { return V.Id.Equals(F.JointId, ESearchCase::CaseSensitive); });
+        const auto* J = I->Joints.FindByPredicate(
+            [&F](const auto& V) { return V.Id.Equals(F.JointId, ESearchCase::CaseSensitive); });
         const int32 Count = J ? (J->Type == EUBotPhysicsJointType::Free    ? 6
                                  : J->Type == EUBotPhysicsJointType::Ball  ? 3
                                  : J->Type == EUBotPhysicsJointType::Fixed ? 0
                                                                            : 1)
                               : -1;
-        if (!J || F.Values.Num() != Count || !Finite(F.Values) || Seen.Contains(F.JointId))
+        if (!J || F.Values.Num() != Count || !Finite(F.Values) || HasSeen(F.JointId))
         {
             Error = INVTEXT("Generalized force identity, dimension or values are invalid.");
             return false;
@@ -398,12 +402,12 @@ bool FUBotMuJoCoSolver::ApplyInputs(int64 Id, const FUBotPhysicsInputs &Input, F
         Seen.Add(F.JointId);
     }
     Seen.Reset();
-    for (const auto &W : Input.BodyWrenches)
+    for (const auto& W : Input.BodyWrenches)
     {
         const auto BodyId = UTF8(W.BodyId);
         const bool bFound = std::any_of(I->Native.Value.Bodies.begin(), I->Native.Value.Bodies.end(),
-                                        [&BodyId](const auto &B) { return B.Id == BodyId; });
-        if (!bFound || W.ForceNewtons.ContainsNaN() || W.TorqueNewtonMeters.ContainsNaN() || Seen.Contains(W.BodyId))
+                                        [&BodyId](const auto& B) { return B.Id == BodyId; });
+        if (!bFound || W.ForceNewtons.ContainsNaN() || W.TorqueNewtonMeters.ContainsNaN() || HasSeen(W.BodyId))
         {
             Error = INVTEXT("Body wrench identity or values are invalid.");
             return false;
@@ -411,13 +415,13 @@ bool FUBotMuJoCoSolver::ApplyInputs(int64 Id, const FUBotPhysicsInputs &Input, F
         Seen.Add(W.BodyId);
     }
     Seen.Reset();
-    for (const auto &K : Input.KinematicTargets)
+    for (const auto& K : Input.KinematicTargets)
     {
         const auto BodyId = UTF8(K.BodyId);
         const bool bFound = std::any_of(I->Native.Value.Bodies.begin(), I->Native.Value.Bodies.end(),
-                                        [&BodyId](const auto &B) { return B.Id == BodyId && B.Kinematic; });
+                                        [&BodyId](const auto& B) { return B.Id == BodyId && B.Kinematic; });
         if (!bFound || K.WorldTransform.ContainsNaN() || !K.WorldTransform.GetScale3D().Equals(FVector::OneVector) ||
-            !K.WorldTransform.GetRotation().IsNormalized() || Seen.Contains(K.BodyId))
+            !K.WorldTransform.GetRotation().IsNormalized() || HasSeen(K.BodyId))
         {
             Error = INVTEXT("Kinematic target must name a kinematic body and contain a finite rigid transform.");
             return false;
@@ -428,15 +432,15 @@ bool FUBotMuJoCoSolver::ApplyInputs(int64 Id, const FUBotPhysicsInputs &Input, F
     return true;
 }
 
-bool FUBotMuJoCoSolver::UpdateScene(const FUBotPhysicsSceneUpdate &Update, FText &Error)
+bool FUBotMuJoCoSolver::UpdateScene(const FUBotPhysicsSceneUpdate& Update, FText& Error)
 {
     auto Next = ForeignBodies;
     for (int64 Id : Update.Removed)
         Next.Remove(Id);
-    for (const auto &Body : Update.Added)
+    for (const auto& Body : Update.Added)
         Next.Add(Body.Id, Body);
-    for (const auto &P : Update.KinematicPoses)
-        if (auto *Body = Next.Find(P.Id))
+    for (const auto& P : Update.KinematicPoses)
+        if (auto* Body = Next.Find(P.Id))
             Body->WorldTransform = P.WorldTransform;
     if (!Update.Removed.IsEmpty() || !Update.Added.IsEmpty())
     {
@@ -448,5 +452,52 @@ bool FUBotMuJoCoSolver::UpdateScene(const FUBotPhysicsSceneUpdate &Update, FText
         }
     }
     ForeignBodies = MoveTemp(Next);
+    return true;
+}
+
+bool FUBotMuJoCoSolver::GetActuators(int64 Id, TArray<FUBotMuJoCoActuatorDescription>& Out) const
+{
+    if (!FindInstance(Id))
+        return false;
+    TArray<FUBotMuJoCoActuatorDescription> Result;
+    for (const auto& A : Scene.GetActuators(Id))
+    {
+        auto& Value = Result.AddDefaulted_GetRef();
+        Value.Name = UTF8_TO_TCHAR(A.Name.c_str());
+        Value.InputCount = A.InputCount;
+        Value.bLimited = A.Limited;
+        Value.Range = FVector2D(A.Minimum, A.Maximum);
+    }
+    Out = MoveTemp(Result);
+    return true;
+}
+
+bool FUBotMuJoCoSolver::GetActivation(int64 Id, const FString& Name, FUBotMuJoCoNativeValues& Out) const
+{
+    if (!bHasEpoch || !FindInstance(Id))
+        return false;
+    N::ActuatorState State;
+    if (!Scene.GetActuatorState(Id, UTF8(Name), State))
+        return false;
+    FUBotMuJoCoNativeValues Result;
+    if (!State.Activation.empty())
+        Result.Values.Append(State.Activation.data(), static_cast<int32>(State.Activation.size()));
+    Result.TimestampSeconds = EpochSimSeconds + State.NativeTimeSeconds - EpochNativeSeconds;
+    Out = MoveTemp(Result);
+    return true;
+}
+
+bool FUBotMuJoCoSolver::GetSensor(int64 Id, const FString& Name, FUBotMuJoCoNativeValues& Out) const
+{
+    if (!bHasEpoch || !FindInstance(Id))
+        return false;
+    N::SensorState State;
+    if (!Scene.GetSensorState(Id, UTF8(Name), State))
+        return false;
+    FUBotMuJoCoNativeValues Result;
+    if (!State.Values.empty())
+        Result.Values.Append(State.Values.data(), static_cast<int32>(State.Values.size()));
+    Result.TimestampSeconds = EpochSimSeconds + State.NativeTimeSeconds - EpochNativeSeconds;
+    Out = MoveTemp(Result);
     return true;
 }
