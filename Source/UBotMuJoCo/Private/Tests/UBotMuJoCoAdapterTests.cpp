@@ -70,6 +70,7 @@ public:
                 auto* Preset = NewObject<UUBotMuJoCoSolverPreset>(Settings);
                 Preset->StepSeconds = 0.002;
                 Preset->GravityMetersPerSecondSquared = FVector::ZeroVector;
+                Preset->NativeOptions = TEXT("<option integrator=\"Euler\"/>");
                 Settings->SolverPreset = Preset;
             }
         }
