@@ -14,5 +14,7 @@ public class UBotMuJoCoNative : ModuleRules
         PublicAdditionalLibraries.Add(Path.Combine(SDK, "lib/Win64/mujoco.lib"));
         PublicDelayLoadDLLs.Add("mujoco.dll");
         RuntimeDependencies.Add(Path.Combine(SDK, "lib/Win64/mujoco.dll"));
+        RuntimeDependencies.Add(Path.Combine(SDK, "LICENSE"), StagedFileType.NonUFS);
+        RuntimeDependencies.Add(Path.Combine(SDK, "THIRD_PARTY_NOTICES.txt"), StagedFileType.NonUFS);
     }
 }
