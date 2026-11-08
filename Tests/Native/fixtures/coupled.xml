@@ -1,0 +1,13 @@
+<mujoco model="coupled">
+  <compiler angle="radian"/>
+  <option timestep="0.002" gravity="0 0 -9.81"/>
+  <worldbody>
+    <body name="left" pos="-0.3 0 1"><joint name="a" axis="0 1 0" ref="0.1" damping="0.1"/><geom name="left_rod" type="capsule" fromto="0 0 0 0 0 -0.4" size="0.03" mass="0.7"/><site name="tip_a" pos="0 0 -0.4"/></body>
+    <body name="right" pos="0.3 0 1"><joint name="b" axis="0 1 0" ref="0.1" damping="0.1"/><geom name="right_rod" type="capsule" fromto="0 0 0 0 0 -0.4" size="0.03" mass="0.7"/><site name="tip_b" pos="0 0 -0.4"/></body>
+  </worldbody>
+  <tendon><fixed name="sum"><joint joint="a" coef="1"/><joint joint="b" coef="1"/></fixed></tendon>
+  <equality><joint name="mimic" joint1="b" joint2="a" polycoef="0 1 0 0 0"/></equality>
+  <actuator><general name="filtered" tendon="sum" dyntype="filter" dynprm="0.03" gainprm="2" ctrllimited="true" ctrlrange="-1 1"/></actuator>
+  <sensor><jointpos name="angle" joint="a"/><actuatorfrc name="force" actuator="filtered"/></sensor>
+  <keyframe><key name="home" qpos="0.1 0.1" act="0.2" ctrl="0.2"/></keyframe>
+</mujoco>

@@ -1,0 +1,7 @@
+<mujoco model="pendulum">
+  <compiler angle="radian"/>
+  <option timestep="0.002" gravity="0 0 -9.81"/>
+  <worldbody><body name="arm" pos="0 0 1"><joint name="hinge" type="hinge" axis="0 1 0" ref="0.25" limited="true" range="-1 1"/><geom name="rod" type="capsule" fromto="0 0 0 0 0 -0.6" size="0.04" mass="1"/></body></worldbody>
+  <actuator><motor name="motor" joint="hinge" ctrllimited="true" ctrlrange="-2 2"/></actuator>
+  <keyframe><key name="start" qpos="0.3"/></keyframe>
+</mujoco>
