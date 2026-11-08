@@ -1,0 +1,34 @@
+{
+    "FileVersion": 3,
+    "Version": 1,
+    "VersionName": "0.1.0",
+    "FriendlyName": "uBot MuJoCo",
+    "Description": "Native CPU MuJoCo solver for uBot Physics models and Unreal Engine scenes.",
+    "Category": "uBot",
+    "CreatedBy": "AstreoX",
+    "CreatedByURL": "https://github.com/AstreoX",
+    "DocsURL": "https://github.com/AstreoX/uBotMuJoCo",
+    "CanContainContent": true,
+    "IsBetaVersion": true,
+    "SupportedTargetPlatforms": [ "Win64" ],
+    "Plugins": [
+        { "Name": "UBotCore", "Enabled": true },
+        { "Name": "UBotPhysics", "Enabled": true }
+    ],
+    "Modules": [
+        { "Name": "UBotMuJoCoNative", "Type": "Runtime", "LoadingPhase": "PreDefault", "PlatformAllowList": [ "Win64" ] },
+        { "Name": "UBotMuJoCo", "Type": "Runtime", "LoadingPhase": "Default", "PlatformAllowList": [ "Win64" ] },
+        { "Name": "UBotMuJoCoEditor", "Type": "Editor", "LoadingPhase": "Default", "PlatformAllowList": [ "Win64" ] }
+    ],
+    "UBot": {
+        "Layer": "Capability",
+        "Repository": "https://github.com/AstreoX/uBotMuJoCo.git",
+        "Requires": [
+            { "Name": "UBotCore", "Version": "^0.2.0" },
+            { "Name": "UBotPhysics", "Version": "^0.2.0" }
+        ],
+        "EnginePlugins": [],
+        "Provides": [ "Physics.MuJoCo", "Body.Articulated" ],
+        "Tags": [ "physics", "mujoco" ]
+    }
+}

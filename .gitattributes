@@ -1,0 +1,10 @@
+* text=auto
+*.h text eol=lf
+*.cpp text eol=lf
+*.cs text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+docs/api.json text eol=lf
+*.uasset binary
+*.dll binary
+*.lib binary
