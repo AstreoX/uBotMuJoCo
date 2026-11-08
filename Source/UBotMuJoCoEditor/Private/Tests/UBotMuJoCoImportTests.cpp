@@ -49,6 +49,13 @@ bool FUBotMuJoCoEditorImportTest::RunTest(const FString& Parameters)
     AddExpectedError(TEXT("Model reimport failed:"), EAutomationExpectedErrorFlags::Contains, 1);
     TestTrue(TEXT("Missing input fails reimport"), Factory->Reimport(Asset) == EReimportResult::Failed);
     TestTrue(TEXT("Failed reimport keeps published asset"), Asset->Model.Revision == ValidRevision);
+    AddExpectedError(TEXT("Model import failed:"), EAutomationExpectedErrorFlags::Contains, 1);
+    TestNull(TEXT("Failed overwrite import returns no replacement"),
+             Factory->FactoryCreateFile(
+                 UUBotPhysicsModelAsset::StaticClass(), Package, TEXT("Imported"), RF_Public | RF_Standalone,
+                 FPaths::Combine(FPaths::GetPath(Filename), TEXT("missing_input.xml")), nullptr, GWarn, bCanceled));
+    TestTrue(TEXT("Failed overwrite preserves existing definition"), Asset->Model.Revision == ValidRevision);
+    TestTrue(TEXT("Failed overwrite keeps the existing asset exported"), Asset->HasAllFlags(RF_Public | RF_Standalone));
     Asset->ClearFlags(RF_Public | RF_Standalone);
     if (Data->SuggestedPreset)
         Data->SuggestedPreset->ClearFlags(RF_Public | RF_Standalone);
