@@ -8,6 +8,16 @@
 #include "Interfaces/IPluginManager.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "Components/BoxComponent.h"
+#include "Engine/Engine.h"
+#include "Engine/World.h"
+#include "EngineUtils.h"
+#include "GameFramework/Actor.h"
+#include "UBotMuJoCo.h"
+#include "UBotMuJoCoLibrary.h"
+#include "UBotMuJoCoWorldSettings.h"
+#include "UBotPhysicsBindingComponent.h"
+#include "UBotPhysicsSubsystem.h"
 
 namespace
 {
@@ -38,6 +48,95 @@ FUBotPhysicsModel MakeQuaternionModel()
     Ball.InitialVelocity.Init(0.0, 3);
     M.Joints.Add(Ball);
     return M;
+}
+
+/** Real game World and Physics subsystem; solver creation is left to the registered backend factory. */
+class FScopedMuJoCoWorld
+{
+public:
+    FScopedMuJoCoWorld() : World(UWorld::CreateWorld(EWorldType::Game, false)), SavedFrameCounter(GFrameCounter)
+    {
+        if (World && GEngine)
+        {
+            World->AddToRoot();
+            GEngine->CreateNewWorldContext(EWorldType::Game).SetCurrentWorld(World);
+            World->InitializeActorsForPlay(FURL());
+            Physics = World->GetSubsystem<UUBotPhysicsSubsystem>();
+            if (Physics)
+                Physics->OnWorldBeginPlay(*World);
+            auto* Settings = World->SpawnActor<AUBotMuJoCoWorldSettings>();
+            if (Settings)
+            {
+                auto* Preset = NewObject<UUBotMuJoCoSolverPreset>(Settings);
+                Preset->StepSeconds = 0.002;
+                Preset->GravityMetersPerSecondSquared = FVector::ZeroVector;
+                Preset->NativeOptions = TEXT("<option integrator=\"Euler\"/>");
+                Settings->SolverPreset = Preset;
+            }
+        }
+    }
+
+    ~FScopedMuJoCoWorld()
+    {
+        if (!World)
+            return;
+        if (World->AreActorsInitialized())
+        {
+            for (TActorIterator<AActor> It(World); It; ++It)
+                It->RouteEndPlay(EEndPlayReason::LevelTransition);
+        }
+        if (GEngine)
+            GEngine->DestroyWorldContext(World);
+        World->DestroyWorld(false);
+        World->RemoveFromRoot();
+        GFrameCounter = SavedFrameCounter;
+    }
+
+    FScopedMuJoCoWorld(const FScopedMuJoCoWorld&) = delete;
+    FScopedMuJoCoWorld& operator=(const FScopedMuJoCoWorld&) = delete;
+
+    void Tick()
+    {
+        World->Tick(LEVELTICK_All, 0.01f);
+        ++GFrameCounter;
+    }
+
+    UWorld* World = nullptr;
+    UUBotPhysicsSubsystem* Physics = nullptr;
+
+private:
+    uint64 SavedFrameCounter = 0;
+};
+
+struct FBoundMuJoCoBody
+{
+    UBoxComponent* Body = nullptr;
+    UUBotPhysicsBindingComponent* Binding = nullptr;
+};
+
+FBoundMuJoCoBody AddBoundBody(FScopedMuJoCoWorld& Scope, UUBotPhysicsModelAsset* Model)
+{
+    FBoundMuJoCoBody Result;
+    AActor* Actor = Scope.World->SpawnActor<AActor>();
+    if (!Actor)
+        return Result;
+    Result.Body = NewObject<UBoxComponent>(Actor, TEXT("Body"));
+    Result.Body->SetMobility(EComponentMobility::Movable);
+    Result.Body->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    Actor->SetRootComponent(Result.Body);
+    Actor->AddInstanceComponent(Result.Body);
+    Result.Body->RegisterComponent();
+    Result.Binding = NewObject<UUBotPhysicsBindingComponent>(Actor, TEXT("PhysicsBinding"));
+    Result.Binding->bBindOnBeginPlay = false;
+    Result.Binding->Backend = UBot::MuJoCo::BackendName;
+    Result.Binding->Model = Model;
+    FUBotPhysicsBodyBinding Mapping;
+    Mapping.ModelBodyId = TEXT("body");
+    Mapping.Component.OverrideComponent = Result.Body;
+    Result.Binding->Bodies.Add(Mapping);
+    Actor->AddInstanceComponent(Result.Binding);
+    Result.Binding->RegisterComponent();
+    return Result;
 }
 } // namespace
 
@@ -417,7 +516,161 @@ bool FUBotMuJoCoSceneContactTest::RunTest(const FString& Parameters)
     Motion.KinematicPoses.Add(Target);
     TestTrue(TEXT("Kinematic scene pose update is accepted without topology change"),
              Solver.UpdateScene(Motion, Error));
-    TestTrue(TEXT("Next step accepts the updated mocap input frame"), Solver.Step((Steps + 1) * Config.StepSeconds, Error));
+    TestTrue(TEXT("Next step accepts the updated mocap input frame"),
+             Solver.Step((Steps + 1) * Config.StepSeconds, Error));
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUBotMuJoCoWorldIsolationTest, "UBotMuJoCo.Adapter.WorldIsolation",
+                                 EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUBotMuJoCoWorldIsolationTest::RunTest(const FString& Parameters)
+{
+    FScopedMuJoCoWorld A;
+    FScopedMuJoCoWorld B;
+    if (!TestNotNull(TEXT("World A has a real Physics subsystem"), A.Physics) ||
+        !TestNotNull(TEXT("World B has a real Physics subsystem"), B.Physics))
+        return false;
+
+    auto* Model = NewObject<UUBotPhysicsModelAsset>();
+    FUBotPhysicsModelBuilder Builder;
+    FUBotPhysicsModelBody Body;
+    Body.Id = TEXT("body");
+    Body.MassKilograms = 1.0;
+    Body.InertiaKilogramMetersSquared = FVector(0.004);
+    Builder.Model.Bodies.Add(Body);
+    FUBotPhysicsModelJoint Joint;
+    Joint.Id = TEXT("free");
+    Joint.BodyId = Body.Id;
+    Joint.Type = EUBotPhysicsJointType::Free;
+    Builder.Model.Joints.Add(Joint);
+    FUBotPhysicsModelGeometry Sphere;
+    Sphere.Id = TEXT("sphere");
+    Sphere.BodyId = Body.Id;
+    Sphere.Type = EUBotPhysicsGeometryType::Sphere;
+    Sphere.Size = FVector(0.1, 0.0, 0.0);
+    Builder.Model.Geometries.Add(Sphere);
+    FText Error;
+    if (!TestTrue(TEXT("One common model definition validates"), Builder.Finalize(Model->Model, Error)))
+        return false;
+    // Both Worlds deliberately use the same asset, body/joint names and local instance numbering.
+    const FBoundMuJoCoBody BodyA = AddBoundBody(A, Model);
+    const FBoundMuJoCoBody BodyB = AddBoundBody(B, Model);
+    if (!TestNotNull(TEXT("World A binding created"), BodyA.Binding) ||
+        !TestNotNull(TEXT("World B binding created"), BodyB.Binding))
+        return false;
+    if (!TestTrue(TEXT("World A binds through its Physics subsystem and registered MuJoCo factory"),
+                  BodyA.Binding->Bind()))
+    {
+        AddError(BodyA.Binding->GetBindingError().ToString());
+        return false;
+    }
+    if (!TestTrue(TEXT("World B binds through its Physics subsystem and registered MuJoCo factory"),
+                  BodyB.Binding->Bind()))
+    {
+        AddError(BodyB.Binding->GetBindingError().ToString());
+        return false;
+    }
+    TestTrue(TEXT("Each World owns a different solver object"),
+             A.Physics->FindSolver(UBot::MuJoCo::BackendName) != B.Physics->FindSolver(UBot::MuJoCo::BackendName));
+    TArray<FUBotMuJoCoActuatorDescription> Actuators;
+    TestTrue(TEXT("World A resolves through the actual MuJoCo factory map"),
+             UUBotMuJoCoLibrary::GetActuators(BodyA.Binding, Actuators));
+    TestTrue(TEXT("World B resolves through the actual MuJoCo factory map"),
+             UUBotMuJoCoLibrary::GetActuators(BodyB.Binding, Actuators));
+
+    FUBotPhysicsInputs InputB;
+    FUBotPhysicsBodyWrench ForceB;
+    ForceB.BodyId = Body.Id;
+    ForceB.ForceNewtons = FVector(0.0, 1.0, 0.0);
+    InputB.BodyWrenches.Add(ForceB);
+    if (!TestTrue(TEXT("World B retains its own one-newton input"), BodyB.Binding->ApplyInputs(InputB, Error)))
+        return false;
+    for (int32 Frame = 0; Frame < 6; ++Frame)
+    {
+        A.Tick();
+        B.Tick();
+    }
+    FUBotBodyState BeforeB;
+    if (!TestTrue(TEXT("World B has integrated a real native endpoint"),
+                  BodyB.Binding->GetBodyState(BodyB.Body, BeforeB)))
+        return false;
+    TestTrue(TEXT("World B's independent force produces positive Y velocity"),
+             BeforeB.LinearVelocityMetersPerSecond.Y > 0.0);
+    const double BeforeBClock = B.World->GetTimeSeconds();
+    const int64 BeforeBInstance = BodyB.Binding->GetModelInstanceId();
+    IUBotPhysicsSolver* const BeforeBSolver = B.Physics->FindSolver(UBot::MuJoCo::BackendName);
+    const auto CheckBUnchanged = [&]() {
+        FUBotBodyState Current;
+        if (!TestTrue(TEXT("World B endpoint stays available"), BodyB.Binding->GetBodyState(BodyB.Body, Current)))
+            return false;
+        TestTrue(TEXT("World B position is unchanged by operations on A"),
+                 Current.PositionMeters.Equals(BeforeB.PositionMeters, 1.e-12));
+        TestTrue(TEXT("World B velocity is unchanged by operations on A"),
+                 Current.LinearVelocityMetersPerSecond.Equals(BeforeB.LinearVelocityMetersPerSecond, 1.e-12));
+        TestTrue(TEXT("World B orientation is unchanged by operations on A"),
+                 Current.Orientation.Equals(BeforeB.Orientation, 1.e-12));
+        TestEqual(TEXT("World B state timestamp is unchanged"), Current.TimestampSeconds, BeforeB.TimestampSeconds);
+        TestEqual(TEXT("World B clock is unchanged"), B.World->GetTimeSeconds(), BeforeBClock);
+        TestEqual(TEXT("World B remains bound"), BodyB.Binding->GetBindingStatus(), EUBotPhysicsBindingStatus::Bound);
+        TestEqual(TEXT("World B instance identity is unchanged"), BodyB.Binding->GetModelInstanceId(), BeforeBInstance);
+        TestTrue(TEXT("World B keeps its own solver"),
+                 B.Physics->FindSolver(UBot::MuJoCo::BackendName) == BeforeBSolver);
+        return true;
+    };
+
+    FUBotPhysicsInputs InputA;
+    FUBotPhysicsBodyWrench ForceA;
+    ForceA.BodyId = Body.Id;
+    ForceA.ForceNewtons = FVector(2.0, 0.0, 0.0);
+    InputA.BodyWrenches.Add(ForceA);
+    if (!TestTrue(TEXT("World A accepts a distinct physical input"), BodyA.Binding->ApplyInputs(InputA, Error)))
+        return false;
+    if (!CheckBUnchanged())
+        return false;
+    for (int32 Frame = 0; Frame < 10; ++Frame)
+        A.Tick();
+    FUBotBodyState StateA;
+    if (!TestTrue(TEXT("World A actually advances under its X force"), BodyA.Binding->GetBodyState(BodyA.Body, StateA)))
+        return false;
+    TestTrue(TEXT("World A's force produces positive X velocity"), StateA.LinearVelocityMetersPerSecond.X > 0.0);
+    TestTrue(TEXT("World A timestamp advances beyond B's frozen endpoint"),
+             StateA.TimestampSeconds > BeforeB.TimestampSeconds);
+    if (!CheckBUnchanged())
+        return false;
+    if (!TestTrue(TEXT("Reset only World A's backend"), A.Physics->ResetBackend(UBot::MuJoCo::BackendName, Error)))
+        return false;
+    TestFalse(TEXT("A's reset clears only A's published endpoint"), BodyA.Binding->GetBodyState(BodyA.Body, StateA));
+    if (!CheckBUnchanged())
+        return false;
+
+    B.Tick();
+    FUBotBodyState AfterB;
+    if (!TestTrue(TEXT("World B continues integrating after A's reset"),
+                  BodyB.Binding->GetBodyState(BodyB.Body, AfterB)))
+        return false;
+    constexpr double Step = 0.002;
+    const int64 CompletedSteps = FMath::RoundToInt64((AfterB.TimestampSeconds - BeforeB.TimestampSeconds) / Step);
+    TestTrue(TEXT("World B advances on its own existing epoch"), CompletedSteps > 0);
+    const double Elapsed = static_cast<double>(CompletedSteps) * Step;
+    TestTrue(TEXT("World B timestamp follows its previous grid"),
+             FMath::IsNearlyEqual(AfterB.TimestampSeconds, BeforeB.TimestampSeconds + Elapsed, 1.e-9));
+    // Independent constant-force solution for MuJoCo's semi-implicit Euler step: mass=1 kg,
+    // acceleration=1 m/s^2, with no gravity, damping, contacts or rotational motion.
+    const double ExpectedVelocityY = BeforeB.LinearVelocityMetersPerSecond.Y + Elapsed;
+    const double ExpectedPositionY = BeforeB.PositionMeters.Y + BeforeB.LinearVelocityMetersPerSecond.Y * Elapsed +
+                                     0.5 * Step * Step * static_cast<double>(CompletedSteps * (CompletedSteps + 1));
+    TestTrue(TEXT("A's reset does not clear B's held input or native velocity"),
+             FMath::IsNearlyEqual(AfterB.LinearVelocityMetersPerSecond.Y, ExpectedVelocityY, 1.e-8));
+    TestTrue(TEXT("B continues its own analytic position trajectory"),
+             FMath::IsNearlyEqual(AfterB.PositionMeters.Y, ExpectedPositionY, 1.e-8));
+    TestTrue(TEXT("World A's X input never leaks into B"),
+             FMath::IsNearlyZero(AfterB.LinearVelocityMetersPerSecond.X, 1.e-12));
+    TestEqual(TEXT("World B remains bound after resuming"), BodyB.Binding->GetBindingStatus(),
+              EUBotPhysicsBindingStatus::Bound);
+    TestEqual(TEXT("World B keeps its instance after resuming"), BodyB.Binding->GetModelInstanceId(), BeforeBInstance);
+    TestTrue(TEXT("World B native factory mapping remains valid"),
+             UUBotMuJoCoLibrary::GetActuators(BodyB.Binding, Actuators));
     return true;
 }
 
