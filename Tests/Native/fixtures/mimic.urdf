@@ -1,0 +1,8 @@
+<robot name="mimic_robot">
+<link name="base"/>
+<link name="arm_a"><inertial><mass value="1"/><inertia ixx="0.02" iyy="0.02" izz="0.02" ixy="0" ixz="0" iyz="0"/></inertial><collision><geometry><box size="0.2 0.2 0.2"/></geometry></collision></link>
+<link name="arm_b"><inertial><mass value="1"/><inertia ixx="0.02" iyy="0.02" izz="0.02" ixy="0" ixz="0" iyz="0"/></inertial><collision><geometry><box size="0.2 0.2 0.2"/></geometry></collision></link>
+<joint name="a" type="revolute"><parent link="base"/><child link="arm_a"/><axis xyz="0 1 0"/><origin xyz="-0.3 0 1"/><limit lower="-1" upper="1" effort="5" velocity="2"/></joint>
+<joint name="b" type="revolute"><parent link="base"/><child link="arm_b"/><axis xyz="0 1 0"/><origin xyz="0.3 0 1"/><limit lower="-1" upper="1" effort="5" velocity="2"/><mimic joint="a" multiplier="-1.5" offset="0.2"/></joint>
+<gazebo reference="base"><material>ignored_simulator_extension</material></gazebo>
+</robot>

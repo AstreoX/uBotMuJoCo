@@ -7,7 +7,7 @@
   </worldbody>
   <tendon><fixed name="sum"><joint joint="a" coef="1"/><joint joint="b" coef="1"/></fixed></tendon>
   <equality><joint name="mimic" joint1="b" joint2="a" polycoef="0 1 0 0 0"/></equality>
-  <actuator><general name="filtered" tendon="sum" dyntype="filter" dynprm="0.03" gainprm="2" ctrllimited="true" ctrlrange="-1 1"/></actuator>
+  <actuator><general name="filtered" tendon="sum" dyntype="filter" dynprm="0.03" nsample="4" delay="0.004" gainprm="2" ctrllimited="true" ctrlrange="-1 1"/></actuator>
   <sensor><jointpos name="angle" joint="a"/><actuatorfrc name="force" actuator="filtered"/></sensor>
   <keyframe><key name="home" qpos="0.1 0.1" act="0.2" ctrl="0.2"/></keyframe>
 </mujoco>
