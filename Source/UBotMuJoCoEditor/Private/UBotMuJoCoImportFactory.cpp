@@ -154,22 +154,41 @@ UObject* UUBotMuJoCoImportFactory::FactoryCreateFile(UClass* InClass, UObject* P
                                                      FFeedbackContext* Warn, bool& bCanceled)
 {
     bCanceled = false;
-    auto* Asset = NewObject<UUBotPhysicsModelAsset>(Parent, Name, Flags);
-    const FString PresetPackageName = Parent->GetOutermost()->GetName() + TEXT("_SolverPreset");
-    UPackage* PresetPackage = CreatePackage(*PresetPackageName);
-    auto* Preset =
-        NewObject<UUBotMuJoCoSolverPreset>(PresetPackage, *FPackageName::GetLongPackageAssetName(PresetPackageName),
-                                           RF_Public | RF_Standalone | RF_Transactional);
+    // Compile into transient objects before touching an existing destination or preset.
+    auto* Candidate = NewObject<UUBotPhysicsModelAsset>();
+    auto* CandidatePreset = NewObject<UUBotMuJoCoSolverPreset>();
     FText Error;
-    if (!ImportAsset(Filename, *Asset, *Preset, Error))
+    if (!ImportAsset(Filename, *Candidate, *CandidatePreset, Error))
     {
         UE_LOG(LogUBotMuJoCo, Error, TEXT("Model import failed: %s"), *Error.ToString());
-        Preset->ClearFlags(RF_Public | RF_Standalone);
-        Asset->ClearFlags(RF_Public | RF_Standalone);
         return nullptr;
     }
+    auto* Asset = FindObject<UUBotPhysicsModelAsset>(Parent, *Name.ToString());
+    if (!Asset)
+        Asset = NewObject<UUBotPhysicsModelAsset>(Parent, Name, Flags);
+    const FString PresetPackageName = Parent->GetOutermost()->GetName() + TEXT("_SolverPreset");
+    UPackage* PresetPackage = CreatePackage(*PresetPackageName);
+    const FString PresetName = FPackageName::GetLongPackageAssetName(PresetPackageName);
+    auto* Preset = FindObject<UUBotMuJoCoSolverPreset>(PresetPackage, *PresetName);
+    const bool bNewPreset = !Preset;
+    if (!Preset)
+        Preset = NewObject<UUBotMuJoCoSolverPreset>(PresetPackage, *PresetName,
+                                                    RF_Public | RF_Standalone | RF_Transactional);
+    Asset->Modify();
+    Preset->Modify();
+    Preset->StepSeconds = CandidatePreset->StepSeconds;
+    Preset->GravityMetersPerSecondSquared = CandidatePreset->GravityMetersPerSecondSquared;
+    Preset->NativeOptions = CandidatePreset->NativeOptions;
+    auto* Extension =
+        DuplicateObject<UUBotMuJoCoModelData>(CastChecked<UUBotMuJoCoModelData>(Candidate->Model.Extension), Asset);
+    Extension->SuggestedPreset = Preset;
+    Asset->Model = MoveTemp(Candidate->Model);
+    Asset->Model.Extension = Extension;
+    Asset->MarkPackageDirty();
+    Preset->MarkPackageDirty();
     SessionSourcePaths.Add(Asset, Filename);
-    FAssetRegistryModule::AssetCreated(Preset);
+    if (bNewPreset)
+        FAssetRegistryModule::AssetCreated(Preset);
     return Asset;
 }
 
