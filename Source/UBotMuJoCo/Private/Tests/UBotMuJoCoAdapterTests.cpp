@@ -276,6 +276,15 @@ bool FUBotMuJoCoModelFrameTest::RunTest(const FString& Parameters)
              Solver.GetBodyState(Result.Bodies[0].Handle, State));
     TestTrue(TEXT("Ordinary body's free coordinates are honored"),
              State.PositionMeters.Equals(FVector(1.0, 2.0, 3.0), 1.e-8));
+    Desc.InstanceId = 2;
+    Desc.WorldTransform.SetScale3D(FVector(2.0));
+    FUBotPhysicsModelInstanceResult Rejected;
+    TestFalse(TEXT("Scaled model placement is rejected rather than silently discarded"),
+              Solver.AddModel(Desc, Rejected, Error));
+    TestTrue(TEXT("Rejected placement leaves existing state intact"),
+             Solver.GetBodyState(Result.Bodies[0].Handle, State));
+    TestTrue(TEXT("Rejected placement does not change timestamp"),
+             FMath::IsNearlyEqual(State.TimestampSeconds, 0.002, 1.e-9));
     return true;
 }
 

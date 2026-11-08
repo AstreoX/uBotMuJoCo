@@ -114,7 +114,7 @@ bool ToNative(const FUBotPhysicsModel& M, N::Model& Out, FText& Error)
     if (!M.Validate(Error))
         return false;
     const auto* Extra = Cast<UUBotMuJoCoModelData>(M.Extension);
-    if (M.Extension && !Extra)
+    if (M.Extension && (!Extra || Extra->Backend != FName(TEXT("MuJoCo"))))
     {
         Error = INVTEXT("The model contains an extension which MuJoCo cannot compile.");
         return false;

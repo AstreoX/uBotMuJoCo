@@ -153,6 +153,12 @@ bool FUBotMuJoCoSolver::Compile(const TArray<FInstance>& Models, const TMap<int6
 bool FUBotMuJoCoSolver::AddModel(const FUBotPhysicsModelInstanceDesc& Desc, FUBotPhysicsModelInstanceResult& Out,
                                  FText& Error)
 {
+    if (Desc.WorldTransform.ContainsNaN() || !Desc.WorldTransform.GetRotation().IsNormalized() ||
+        !Desc.WorldTransform.GetScale3D().Equals(FVector::OneVector, 1.e-6))
+    {
+        Error = INVTEXT("Model placement must be a finite rigid transform in meters, with unit scale.");
+        return false;
+    }
     if (Desc.InstanceId <= 0 || FindInstance(Desc.InstanceId))
     {
         Error = INVTEXT("The model instance identity is invalid or already registered.");
