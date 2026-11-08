@@ -97,7 +97,10 @@ void Reference(const std::filesystem::path &Path, const std::string &Motor)
             int N = mj_name2id(M, mjOBJ_JOINT, J.Name.c_str());
             for (std::size_t K = 0; K < V.Position.size(); ++K)
             {
-                Check(std::abs(V.Position[K] - D->qpos[M->jnt_qposadr[N] + K]) < 1e-8, "qpos differs for " + J.Name);
+                Check(std::abs(V.Position[K] - D->qpos[M->jnt_qposadr[N] + K]) < 1e-8,
+                      "qpos differs for " + J.Name + " K=" + std::to_string(K) +
+                          " actual=" + std::to_string(V.Position[K]) +
+                          " expected=" + std::to_string(D->qpos[M->jnt_qposadr[N] + K]));
             }
             for (std::size_t K = 0; K < V.Velocity.size(); ++K)
             {
@@ -272,7 +275,10 @@ void MeshNormalization(const std::filesystem::path &Path)
                   "mesh orientation applied twice");
         }
     }
-    Check(!I.Value.Geometries[0].Vertices.empty(), "decoded visual mesh missing");
+    if (Path.filename() == "mesh.xml")
+    {
+        Check(!I.Value.Geometries[0].Vertices.empty(), "decoded visual mesh missing");
+    }
     mj_deleteModel(M);
     mj_deleteModel(Rebuilt);
     mj_deleteSpec(Spec);
@@ -495,6 +501,48 @@ void UnreservedWorldName()
     Check(S.GetBodyState(1, "world", State) && State.Pose.Position.Z < 0, "generic world name treated as model frame");
     std::cout << "generic world identity is not reserved passed\n";
 }
+
+void AlignedKeyframe(const std::filesystem::path &Path)
+{
+    Resource R = Read(Path);
+    ImportResult I;
+    std::string Error;
+    Check(Import(R.Name, {R}, I, Error), Error);
+    Scene S;
+    Configuration C;
+    Check(S.SetModels({{1, I.Value, {}}}, C, false, Error), Error);
+    Check(S.Reset("pose", Error), Error);
+    char E[2048]{};
+    mjModel *M = mj_loadXML(Path.string().c_str(), nullptr, E, sizeof(E));
+    Check(M != nullptr, E);
+    mjData *D = mj_makeData(M);
+    mj_resetDataKeyframe(M, D, 0);
+    for (int Step = 0; Step < 20; ++Step)
+    {
+        mj_step(M, D);
+        mj_forward(M, D);
+        Check(S.Step({}, Error), Error);
+        JointState J;
+        Check(S.GetJointState(1, "aligned_free", J), "missing aligned keyframe joint");
+        for (int K = 0; K < 7; ++K)
+        {
+            Check(std::abs(J.Position[K] - D->qpos[K]) < 1e-10, "aligned keyframe qpos mismatch");
+        }
+        for (int K = 0; K < 6; ++K)
+        {
+            Check(std::abs(J.Velocity[K] - D->qvel[K]) < 1e-10, "aligned keyframe qvel mismatch");
+        }
+        SensorState V;
+        Check(S.GetSensorState(1, "site_pos", V), "missing aligned site observation");
+        for (int K = 0; K < 3; ++K)
+        {
+            Check(std::abs(V.Values[K] - D->sensordata[K]) < 1e-10, "aligned keyframe native site mismatch");
+        }
+    }
+    mj_deleteData(D);
+    mj_deleteModel(M);
+    std::cout << "alignfree source keyframe and site native differential passed\n";
+}
 int main(int argc, char **argv)
 {
     try
@@ -514,6 +562,11 @@ int main(int argc, char **argv)
         PlacedKeyframe(Root / "offset.xml");
         MultiInput(Root / "multi_input.xml");
         UnreservedWorldName();
+        Reference(Root / "aligned.xml", "");
+        Reference(Root / "fused.xml", "");
+        MeshNormalization(Root / "aligned.xml");
+        MeshNormalization(Root / "fused.xml");
+        AlignedKeyframe(Root / "aligned.xml");
         ImportResult I;
         std::string Error;
         Check(!Import("missing.xml", {}, I, Error), "Missing input accepted");
