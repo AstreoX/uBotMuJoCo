@@ -324,4 +324,101 @@ bool FUBotMuJoCoRestitutionDiagnosticTest::RunTest(const FString& Parameters)
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUBotMuJoCoSceneContactTest, "UBotMuJoCo.Adapter.StaticSceneContact",
+                                 EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUBotMuJoCoSceneContactTest::RunTest(const FString& Parameters)
+{
+    UBot::MuJoCo::Native::Configuration Config;
+    FUBotMuJoCoSolver Solver(Config, false);
+    FUBotPhysicsModelInstanceDesc Desc;
+    Desc.InstanceId = 1;
+    Desc.Model.Revision = FGuid::NewGuid();
+    FUBotPhysicsModelBody Sphere;
+    Sphere.Id = TEXT("sphere");
+    Sphere.LocalTransform.SetTranslation(FVector(0.0, 0.0, 0.11));
+    Sphere.MassKilograms = 1.0;
+    // Uniform solid sphere: I = 2 m r^2 / 5, with r = 0.1 m.
+    Sphere.InertiaKilogramMetersSquared = FVector(0.004);
+    Desc.Model.Bodies.Add(Sphere);
+    FUBotPhysicsModelJoint Free;
+    Free.Id = TEXT("sphere.free");
+    Free.BodyId = Sphere.Id;
+    Free.Type = EUBotPhysicsJointType::Free;
+    Desc.Model.Joints.Add(Free);
+    FUBotPhysicsModelGeometry Surface;
+    Surface.Id = TEXT("sphere.surface");
+    Surface.BodyId = Sphere.Id;
+    Surface.Type = EUBotPhysicsGeometryType::Sphere;
+    Surface.Size = FVector(0.1, 0.0, 0.0);
+    Desc.Model.Geometries.Add(Surface);
+    FUBotPhysicsModelBodyBindingDesc Display;
+    Display.BodyId = Sphere.Id;
+    Desc.BodyBindings.Add(Display);
+    FUBotPhysicsModelInstanceResult Result;
+    FText Error;
+    if (!TestTrue(TEXT("Register free sphere"), Solver.AddModel(Desc, Result, Error)))
+    {
+        AddError(Error.ToString());
+        return false;
+    }
+
+    FUBotPhysicsSceneUpdate Scene;
+    FUBotPhysicsSceneBody Floor;
+    Floor.Id = 1;
+    Floor.Kind = EUBotPhysicsSceneBodyKind::Static;
+    Floor.WorldTransform.SetTranslation(FVector(0.0, 0.0, -0.05));
+    FUBotPhysicsShape FloorShape;
+    FloorShape.Type = EUBotPhysicsShapeType::Box;
+    FloorShape.Size = FVector(0.5, 0.5, 0.05);
+    Floor.Shapes.Add(FloorShape);
+    Scene.Added.Add(Floor);
+    FUBotPhysicsSceneBody Moving;
+    Moving.Id = 2;
+    Moving.Kind = EUBotPhysicsSceneBodyKind::Kinematic;
+    Moving.WorldTransform.SetTranslation(FVector(1.0, 0.0, 1.0));
+    FUBotPhysicsShape MovingShape;
+    MovingShape.Type = EUBotPhysicsShapeType::Box;
+    MovingShape.Size = FVector(0.1);
+    Moving.Shapes.Add(MovingShape);
+    Scene.Added.Add(Moving);
+    if (!TestTrue(TEXT("Accept static floor and remote kinematic collider"), Solver.UpdateScene(Scene, Error)))
+    {
+        AddError(Error.ToString());
+        return false;
+    }
+
+    constexpr int32 Steps = 500;
+    for (int32 Step = 1; Step <= Steps; ++Step)
+    {
+        if (!Solver.Step(static_cast<double>(Step) * Config.StepSeconds, Error))
+        {
+            AddError(FString::Printf(TEXT("Contact integration failed at step %d: %s"), Step, *Error.ToString()));
+            return false;
+        }
+    }
+    FUBotBodyState State;
+    if (!TestTrue(TEXT("Supported sphere endpoint is published"), Solver.GetBodyState(Result.Bodies[0].Handle, State)))
+        return false;
+    TestFalse(TEXT("Contact state remains finite"), State.PositionMeters.ContainsNaN() ||
+                                                        State.Orientation.ContainsNaN() ||
+                                                        State.LinearVelocityMetersPerSecond.ContainsNaN());
+    // The floor top is z=0. A supported sphere center lies near its 0.1 m radius;
+    // allow 0.01 m native compliant penetration and 0.005 m residual settling motion.
+    TestTrue(TEXT("Sphere rests on exported floor instead of falling through"),
+             State.PositionMeters.Z >= 0.09 && State.PositionMeters.Z <= 0.105);
+    TestTrue(TEXT("Endpoint time includes all completed contact steps"),
+             FMath::IsNearlyEqual(State.TimestampSeconds, Steps * Config.StepSeconds, 1.e-9));
+
+    FUBotPhysicsSceneUpdate Motion;
+    FUBotPhysicsScenePose Target;
+    Target.Id = Moving.Id;
+    Target.WorldTransform.SetTranslation(FVector(1.0, 0.0, 2.0));
+    Motion.KinematicPoses.Add(Target);
+    TestTrue(TEXT("Kinematic scene pose update is accepted without topology change"),
+             Solver.UpdateScene(Motion, Error));
+    TestTrue(TEXT("Next step accepts the updated mocap input frame"), Solver.Step((Steps + 1) * Config.StepSeconds, Error));
+    return true;
+}
+
 #endif
